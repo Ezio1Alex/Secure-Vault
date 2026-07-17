@@ -1,0 +1,9 @@
+name = "secure-vault"
+main = "src/index.ts"
+compatibility_date = "2026-07-16"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "vault_db"
+# 本地测试时 id 随便写即可，部署线上前再改
+database_id = "316df86c-b46e-4f05-bc87-f7a6942b79c4"

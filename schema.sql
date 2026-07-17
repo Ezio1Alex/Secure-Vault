@@ -1,0 +1,24 @@
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS passwords;
+DROP TABLE IF EXISTS vault_config;
+
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE passwords (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
+    encrypted_data TEXT NOT NULL,
+    iv TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(username) REFERENCES users(username)
+);
+
+CREATE TABLE vault_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
