@@ -784,9 +784,22 @@ app.get('/', (c) => {
             }
 
             function copyToClipboard(elementId) {
-                navigator.clipboard.writeText(document.getElementById(elementId).textContent).then(function() {
-                    alert("已复制到剪切板！");
-                });
+                navigator.clipboard.writeText(document.getElementById(elementId).textContent);
+                showToast('已复制');
+            }
+
+            function showToast(msg) {
+                var el = document.getElementById('toast');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'toast';
+                    el.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 20px;border-radius:20px;font-size:14px;z-index:9999;opacity:0;transition:opacity 0.3s;pointer-events:none;';
+                    document.body.appendChild(el);
+                }
+                el.textContent = msg;
+                el.style.opacity = '1';
+                clearTimeout(el._timer);
+                el._timer = setTimeout(function() { el.style.opacity = '0'; }, 1500);
             }
 
             function escapeHtml(string) {
