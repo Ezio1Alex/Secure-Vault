@@ -573,6 +573,7 @@ app.get('/', (c) => {
                 editTargetId = null;
                 document.getElementById('saveFormTitle').textContent = '➕ 保存新账号密码';
                 document.getElementById('saveBtn').textContent = '加密并存入云端';
+                document.getElementById('saveBtn').style.background = '';
                 document.getElementById('cancelEditBtn').style.display = 'none';
                 document.getElementById('site').value = '';
                 document.getElementById('editUsername').value = '';
@@ -699,16 +700,17 @@ app.get('/', (c) => {
                     listDiv.innerHTML += \`
                         <div class="secret-item">
                             <div style="flex-grow: 1;">
-                                <span class="badge">已解密</span>
-                                <strong style="font-size: 16px; display:block; color:var(--text);">\${escapeHtml(item.site)}</strong>
+                                <strong style="font-size: 16px; display:block; color:var(--text);">\${escapeHtml(item.site)}
+                                    <button class="secondary" onclick="window.open('https://\${item.site}', '_blank')" style="padding: 2px 8px; font-size: 11px; margin: 0 0 0 8px; width: auto; display: inline;">打开网页</button>
+                                </strong>
                                 <div style="margin: 6px 0 0; font-size: 14px; color:var(--text-secondary);">
                                     账号: <span id="user-\${item.id}">\${escapeHtml(item.username)}</span>
-                                    <button class="secondary copy-btn" onclick="copyToClipboard('user-\${item.id}')">复制</button>
+                                    <button class="secondary copy-btn" onclick="copyToClipboard('user-\${item.id}', '账号已复制')">复制</button>
                                 </div>
                                 <div style="margin: 4px 0 0; font-size: 14px; color:var(--text-secondary);">
                                     密码: <span id="pwd-\${item.id}" style="-webkit-text-security: disc;">\${escapeHtml(item.password)}</span>
                                     <button class="secondary copy-btn" onclick="togglePasswordVisibility('pwd-\${item.id}', this)">显示</button>
-                                    <button class="secondary copy-btn" onclick="copyToClipboard('pwd-\${item.id}')">复制</button>
+                                    <button class="secondary copy-btn" onclick="copyToClipboard('pwd-\${item.id}', '密码已复制')">复制</button>
                                 </div>
                                 \${noteHtml}
                                 \${timeHtml}
@@ -728,8 +730,9 @@ app.get('/', (c) => {
                 if (!item) return;
 
                 editTargetId = id;
-                document.getElementById('saveFormTitle').textContent = '✏️ 编辑密码 #' + id;
+                document.getElementById('saveFormTitle').textContent = '✏️ 编辑密码';
                 document.getElementById('saveBtn').textContent = '更新并保存';
+                document.getElementById('saveBtn').style.background = '#30d158';
                 document.getElementById('cancelEditBtn').style.display = 'inline-block';
                 document.getElementById('site').value = item.site;
                 document.getElementById('editUsername').value = item.username;
@@ -783,9 +786,9 @@ app.get('/', (c) => {
                 }
             }
 
-            function copyToClipboard(elementId) {
+            function copyToClipboard(elementId, msg) {
                 navigator.clipboard.writeText(document.getElementById(elementId).textContent);
-                showToast('已复制');
+                showToast(msg || '已复制');
             }
 
             function showToast(msg) {
