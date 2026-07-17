@@ -15,6 +15,7 @@ CREATE TABLE passwords (
     encrypted_data TEXT NOT NULL,
     iv TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(username) REFERENCES users(username)
 );
 
