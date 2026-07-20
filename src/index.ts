@@ -353,6 +353,7 @@ app.get('/', (c) => {
             function doAutoLock() {
                 cachedMasterKey = null; cachedAuthKey = null; cachedUsername = null;
                 allDecryptedSecrets = [];
+                document.getElementById('usernameInput').value = '';
                 document.getElementById('mainWorkspace').style.display = 'none';
                 document.getElementById('authCard').style.display = 'block';
                 document.getElementById('list').innerHTML = '';
@@ -530,6 +531,9 @@ app.get('/', (c) => {
                             document.getElementById('authCard').style.display = "none";
                             document.getElementById('mainWorkspace').style.display = "block";
                             document.getElementById('currentUserLabel').innerText = "@" + username;
+                            /* 登录成功后清除密码输入 */
+                            document.getElementById('passwordInput').value = '';
+                            document.getElementById('confirmPasswordInput').value = '';
 
                             resetActivity();
                             startLockTimer();
