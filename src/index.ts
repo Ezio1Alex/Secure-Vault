@@ -781,7 +781,14 @@ app.get('/', (c) => {
             async function togglePin(id) {
                 if (!cachedAuthKey) return;
                 await fetch('/api/secrets/' + id + '/pin', { method: 'POST', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
-                await loadSecrets();
+                /* 本地更新，避免全量重解密 */
+                for (var i = 0; i < allDecryptedSecrets.length; i++) {
+                    if (allDecryptedSecrets[i].id === id) {
+                        allDecryptedSecrets[i].pinned = allDecryptedSecrets[i].pinned ? 0 : 1;
+                        break;
+                    }
+                }
+                renderSecrets(getFilteredAndSorted());
             }
 
             /* ====== 密码生成器 ====== */
