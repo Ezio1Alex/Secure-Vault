@@ -16,6 +16,7 @@ CREATE TABLE passwords (
     iv TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    pinned INTEGER DEFAULT 0,
     FOREIGN KEY(username) REFERENCES users(username)
 );
 

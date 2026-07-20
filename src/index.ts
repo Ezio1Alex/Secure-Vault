@@ -71,7 +71,7 @@ const authMiddleware = async (c: Context<AppEnv>, next: Next) => {
 app.get('/api/secrets', authMiddleware, async (c) => {
   const username = c.get('username');
   try {
-    const { results } = await c.env.DB.prepare("SELECT id, encrypted_data, iv, updated_at FROM passwords WHERE username = ? ORDER BY id DESC").bind(username).all();
+    const { results } = await c.env.DB.prepare("SELECT id, encrypted_data, iv, updated_at, pinned FROM passwords WHERE username = ? ORDER BY pinned DESC, id DESC").bind(username).all();
     return c.json(results);
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -83,7 +83,7 @@ app.post('/api/secrets', authMiddleware, async (c) => {
   const { encrypted_data, iv } = await c.req.json();
   if (!encrypted_data || !iv) return c.json({ error: "参数不完整" }, 400);
 
-  await c.env.DB.prepare("INSERT INTO passwords (username, encrypted_data, iv, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)").bind(username, encrypted_data, iv).run();
+  await c.env.DB.prepare("INSERT INTO passwords (username, encrypted_data, iv, updated_at, pinned) VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)").bind(username, encrypted_data, iv).run();
   return c.json({ success: true });
 });
 
@@ -110,6 +110,17 @@ app.delete('/api/secrets/:id', authMiddleware, async (c) => {
   const username = c.get('username');
   try {
     await c.env.DB.prepare("DELETE FROM passwords WHERE id = ? AND username = ?").bind(id, username).run();
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+app.post('/api/secrets/:id/pin', authMiddleware, async (c) => {
+  const id = c.req.param('id');
+  const username = c.get('username');
+  try {
+    await c.env.DB.prepare("UPDATE passwords SET pinned = 1 - pinned WHERE id = ? AND username = ?").bind(id, username).run();
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -211,6 +222,10 @@ app.get('/', (c) => {
 
             /* 编辑按钮行 */
             .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; margin-left: 15px; }
+            .pin-btn { background: #0071e3; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: auto; }
+            .pin-btn:hover { background: #0077ed; }
+            .pin-btn.active { background: #ff9f0a; }
+            .pin-btn.active:hover { background: #ff9500; }
         </style>
     </head>
     <body>
@@ -660,7 +675,8 @@ app.get('/', (c) => {
                             username: credentials.username,
                             password: credentials.password,
                             note: credentials.note || '',
-                            updated_at: item.updated_at || null
+                            updated_at: item.updated_at || null,
+                            pinned: item.pinned || 0
                         });
                     } catch (e) {}
                 }
@@ -679,6 +695,8 @@ app.get('/', (c) => {
                 });
 
                 filtered.sort(function(a, b) {
+                    /* 置顶始终排最前 */
+                    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
                     switch (sortBy) {
                         case 'newest': return b.id - a.id;
                         case 'oldest': return a.id - b.id;
@@ -725,6 +743,7 @@ app.get('/', (c) => {
                                 \${timeHtml}
                             </div>
                             <div class="item-actions">
+                                <button class="pin-btn\${item.pinned ? ' active' : ''}" onclick="togglePin(\${item.id})">\${item.pinned ? '📌 取消置顶' : '📌 置顶'}</button>
                                 <button class="secondary small-btn" onclick="editSecret(\${item.id})" style="width: auto;">✏️ 编辑</button>
                                 <button class="danger small-btn" onclick="deleteSecret(\${item.id})" style="width: auto;">删除</button>
                             </div>
@@ -762,6 +781,12 @@ app.get('/', (c) => {
                         await loadSecrets();
                     }
                 }
+            }
+
+            async function togglePin(id) {
+                if (!cachedAuthKey) return;
+                await fetch('/api/secrets/' + id + '/pin', { method: 'POST', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
+                await loadSecrets();
             }
 
             /* ====== 密码生成器 ====== */
