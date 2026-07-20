@@ -778,10 +778,9 @@ app.get('/', (c) => {
                 }
             }
 
-            async function togglePin(id) {
+            function togglePin(id) {
                 if (!cachedAuthKey) return;
-                await fetch('/api/secrets/' + id + '/pin', { method: 'POST', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
-                /* 本地更新，避免全量重解密 */
+                /* 先本地翻转 + 渲染，再异步发请求 */
                 for (var i = 0; i < allDecryptedSecrets.length; i++) {
                     if (allDecryptedSecrets[i].id === id) {
                         allDecryptedSecrets[i].pinned = allDecryptedSecrets[i].pinned ? 0 : 1;
@@ -789,6 +788,7 @@ app.get('/', (c) => {
                     }
                 }
                 renderSecrets(getFilteredAndSorted());
+                fetch('/api/secrets/' + id + '/pin', { method: 'POST', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
             }
 
             /* ====== 密码生成器 ====== */
