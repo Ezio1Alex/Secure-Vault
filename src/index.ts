@@ -452,12 +452,8 @@ app.get('/', (c) => {
                 const types = [hasUpper, hasLower, hasDigit, hasSymbol].filter(Boolean).length;
                 const len = pwd.length;
 
-                if (len <= 6 || types === 1) return { level: 1, label: '弱', width: 25, cls: 'strength-weak' };
-                if (len >= 8 && types >= 2) {
-                    if (len >= 16 && types === 4) return { level: 4, label: '非常强', width: 100, cls: 'strength-very-strong' };
-                    if (len >= 12 && types >= 3) return { level: 3, label: '强', width: 75, cls: 'strength-strong' };
-                    return { level: 2, label: '中', width: 50, cls: 'strength-medium' };
-                }
+                if (len >= 12 && types >= 3) return { level: 3, label: '强', width: 75, cls: 'strength-strong' };
+                if (len >= 8 && types >= 2) return { level: 2, label: '中', width: 50, cls: 'strength-medium' };
                 return { level: 1, label: '弱', width: 25, cls: 'strength-weak' };
             }
 
@@ -475,8 +471,7 @@ app.get('/', (c) => {
                 var colorMap = {
                     '弱': 'var(--strength-weak)',
                     '中': 'var(--strength-medium)',
-                    '强': 'var(--strength-strong)',
-                    '非常强': 'var(--strength-very-strong)'
+                    '强': 'var(--strength-strong)'
                 };
                 bar.style.background = colorMap[result.label] || 'transparent';
                 label.textContent = '密码强度：' + result.label;
@@ -804,10 +799,32 @@ app.get('/', (c) => {
                 if (document.getElementById('genSymbols').checked) chars += '!@#$%^&*()_+-=[]{}|;:,.<>?';
                 if (!chars) return alert("请至少选择一种字符集！");
 
-                let password = '';
-                const randomValues = new Uint32Array(length);
-                window.crypto.getRandomValues(randomValues);
-                for (let i = 0; i < length; i++) password += chars[randomValues[i] % chars.length];
+                /* 分离特殊符号和非特殊符号 */
+                var symbolRegex = /[^A-Za-z0-9]/g;
+                var symbols = chars.match(symbolRegex) || [];
+                var nonSymbols = chars.replace(symbolRegex, '');
+
+                var buf = new Uint32Array(length + 1);
+                window.crypto.getRandomValues(buf);
+                var password = '';
+
+                if (symbols.length > 0 && nonSymbols.length > 0) {
+                    /* 随机决定用 0~3 个符号 */
+                    var symCount = buf[0] % Math.min(4, length);
+                    var result = [];
+                    for (var i = 0; i < symCount; i++) result.push(symbols[buf[i + 1] % symbols.length]);
+                    for (var i = symCount; i < length; i++) result.push(nonSymbols[buf[i + 1] % nonSymbols.length]);
+                    /* Fisher-Yates 洗牌 */
+                    for (var i = result.length - 1; i > 0; i--) {
+                        var j = buf[i + 1] % (i + 1);
+                        var tmp = result[i]; result[i] = result[j]; result[j] = tmp;
+                    }
+                    password = result.join('');
+                } else {
+                    /* 只有符号或只有非符号，直接生成 */
+                    for (var i = 0; i < length; i++) password += chars[buf[i] % chars.length];
+                }
+
                 document.getElementById('password').value = password;
                 updateStrengthIndicator();
             }
