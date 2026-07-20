@@ -90,11 +90,14 @@ app.post('/api/secrets', authMiddleware, async (c) => {
 app.put('/api/secrets/:id', authMiddleware, async (c) => {
   const id = c.req.param('id');
   const username = c.get('username');
-  const { encrypted_data, iv } = await c.req.json();
+  const { encrypted_data, iv, touch_timestamp } = await c.req.json();
   if (!encrypted_data || !iv) return c.json({ error: "参数不完整" }, 400);
 
   try {
-    const result = await c.env.DB.prepare("UPDATE passwords SET encrypted_data = ?, iv = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND username = ?").bind(encrypted_data, iv, id, username).run();
+    const sql = touch_timestamp === false
+      ? "UPDATE passwords SET encrypted_data = ?, iv = ? WHERE id = ? AND username = ?"
+      : "UPDATE passwords SET encrypted_data = ?, iv = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND username = ?";
+    const result = await c.env.DB.prepare(sql).bind(encrypted_data, iv, id, username).run();
     if (result.meta.changes === 0) return c.json({ error: "记录不存在或无权修改" }, 404);
     return c.json({ success: true });
   } catch (err: any) {
@@ -314,6 +317,7 @@ app.get('/', (c) => {
             let cachedMasterKey = null; let cachedAuthKey = null; let cachedUsername = null;
             let dbSalt = null; let allDecryptedSecrets = []; let isRegisterMode = false;
             let editTargetId = null; /* 正在编辑的记录 id */
+            let editOriginalPassword = null; /* 编辑前的密码，用于判断是否更新时间戳 */
 
             /* ====== 自动锁定 ====== */
             let lastActivity = Date.now();
@@ -575,6 +579,7 @@ app.get('/', (c) => {
             /* ====== 保存 / 编辑 ====== */
             function cancelEdit() {
                 editTargetId = null;
+                editOriginalPassword = null;
                 document.getElementById('saveFormTitle').textContent = '➕ 保存新账号密码';
                 document.getElementById('saveBtn').textContent = '加密并存入云端';
                 document.getElementById('saveBtn').style.background = '';
@@ -605,11 +610,11 @@ app.get('/', (c) => {
                     const iv_str = btoa(String.fromCharCode(...iv));
 
                     if (editTargetId) {
-                        /* 更新已有记录 */
+                        /* 更新已有记录：密码没变则不更新时间戳 */
                         const res = await fetch('/api/secrets/' + editTargetId, {
                             method: 'PUT',
                             headers: { 'Content-Type': 'application/json', 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey },
-                            body: JSON.stringify({ encrypted_data, iv: iv_str })
+                            body: JSON.stringify({ encrypted_data, iv: iv_str, touch_timestamp: password === editOriginalPassword ? false : undefined })
                         });
                         if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
                         cancelEdit();
@@ -734,6 +739,7 @@ app.get('/', (c) => {
                 if (!item) return;
 
                 editTargetId = id;
+                editOriginalPassword = item.password;
                 document.getElementById('saveFormTitle').textContent = '✏️ 编辑密码';
                 document.getElementById('saveBtn').textContent = '更新并保存';
                 document.getElementById('saveBtn').style.background = '#30d158';
