@@ -217,10 +217,6 @@ app.get('/', (c) => {
 
             /* 编辑按钮行 */
             /* 置顶 */
-            .pin-btn { background: #0071e3; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: auto; }
-            .pin-btn:hover { background: #0077ed; }
-            .pin-btn.active { background: #ff9f0a; }
-            .pin-btn.active:hover { background: #ff9500; }
             .pin-btn-top { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px; margin: 0; width: auto; line-height: 1; position: absolute; top: 4px; right: 4px; z-index: 1; }
             .pin-btn-top:hover { background: var(--secondary-bg); border-radius: 4px; }
             .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; margin-left: 15px; padding-top: 26px; }
@@ -247,6 +243,7 @@ app.get('/', (c) => {
                 .header { flex-wrap: wrap; gap: 8px; }
                 .header .danger { font-size: 12px !important; padding: 6px 10px !important; }
                 #togglePwdBtn, #genSettingsBtn, [onclick="generatePassword()"] { min-width: 44px; min-height: 44px; font-size: 16px !important; padding: 10px 12px !important; }
+                .sort-bar > div:first-of-type { width: auto; display: inline-flex; }
             }
         </style>
     </head>
@@ -343,13 +340,18 @@ app.get('/', (c) => {
                 <h3 style="text-align: left; margin-bottom: 15px;">📋 已保存的凭证</h3>
                 <div class="sort-bar">
                     <label>排序：</label>
-                    <select id="sortSelect" onchange="filterSecrets()">
-                        <option value="newest">最近添加</option>
-                        <option value="oldest">最早添加</option>
-                        <option value="alpha-asc">网站名 A→Z</option>
-                        <option value="alpha-desc">网站名 Z→A</option>
-                        <option value="updated">最近更新</option>
-                    </select>
+                    <div style="position: relative; width: auto;">
+                        <div id="sortDisplay" onclick="toggleSortDropdown(event)" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;color:var(--text);background:var(--card-bg);cursor:pointer;display:flex;align-items:center;gap:4px;user-select:none;white-space:nowrap;height:100%;box-sizing:border-box;">
+                            <span id="sortLabel">最近添加</span> <span style="font-size:10px;">▾</span>
+                        </div>
+                        <select id="sortSelect" onchange="onSortChange()" style="display: none;">
+                            <option value="newest">最近添加</option>
+                            <option value="oldest">最早添加</option>
+                            <option value="updated">最近更新</option>
+                            <option value="most">账号最多</option>
+                        </select>
+                        <div id="sortDropdownPanel" style="display:none;position:absolute;top:100%;left:0;min-width:140px;background:var(--card-bg);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:1000;margin-top:4px;padding:4px 0;"></div>
+                    </div>
                     <div style="display: flex; flex-grow: 1; border: 1px solid var(--border); border-radius: 8px; overflow: visible; margin: 0; background: var(--card-bg); position: relative;">
                         <div id="siteFilterDisplay" onclick="toggleSiteDropdown(event)" style="padding: 8px 12px; white-space: nowrap; cursor: pointer; font-size: 14px; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 4px; user-select: none; background: var(--card-bg); color: var(--text); border-radius: 8px 0 0 8px;">
                             <span id="siteFilterLabel">全部网站</span> <span style="font-size: 10px;">▾</span>
@@ -723,33 +725,19 @@ document.getElementById('note').style.height = '44px';
             /* ====== 排序 & 搜索 ====== */
             function getFilteredAndSorted() {
                 const query = document.getElementById('searchBar').value.toLowerCase();
-                const sortBy = document.getElementById('sortSelect').value;
                 const siteFilter = document.getElementById('siteFilter').value;
 
                 var filtered = allDecryptedSecrets.filter(function(item) {
-                    /* 网址筛选 */
                     if (siteFilter && item.site !== siteFilter) return false;
                     return item.site.toLowerCase().includes(query) ||
                            item.username.toLowerCase().includes(query) ||
                            item.note.toLowerCase().includes(query);
                 });
 
-                filtered.sort(function(a, b) {
-                    /* 置顶始终排最前 */
-                    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-                    switch (sortBy) {
-                        case 'newest': return b.id - a.id;
-                        case 'oldest': return a.id - b.id;
-                        case 'alpha-asc': return a.site.localeCompare(b.site);
-                        case 'alpha-desc': return b.site.localeCompare(a.site);
-                        case 'updated': return (b.updated_at || '').localeCompare(a.updated_at || '');
-                        default: return b.id - a.id;
-                    }
-                });
+                /* 组内统一按 id DESC（最新在前），group ordering 在 renderSecrets 里处理 */
+                filtered.sort(function(a, b) { return b.id - a.id; });
 
-                /* 更新网址筛选下拉 */
                 updateSiteFilter();
-
                 return filtered;
             }
 
@@ -783,11 +771,43 @@ document.getElementById('note').style.height = '44px';
                 document.getElementById('siteFilter').dispatchEvent(new Event('change'));
             }
 
+            /* ====== 排序下拉 ====== */
+            function toggleSortDropdown(e) {
+                if (e) e.stopPropagation();
+                var panel = document.getElementById('sortDropdownPanel');
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            }
+
+            function selectSort(val, label) {
+                document.getElementById('sortSelect').value = val;
+                document.getElementById('sortLabel').textContent = label;
+                document.getElementById('sortDropdownPanel').style.display = 'none';
+                filterSecrets();
+            }
+
+            /* 填充排序下拉选项 */
+            (function initSortDropdown() {
+                var sel = document.getElementById('sortSelect');
+                var panel = document.getElementById('sortDropdownPanel');
+                var labels = { newest: '最近添加', oldest: '最早添加', updated: '最近更新', most: '账号最多' };
+                panel.innerHTML = '';
+                for (var i = 0; i < sel.options.length; i++) {
+                    var val = sel.options[i].value;
+                    var label = labels[val] || sel.options[i].textContent;
+                    panel.innerHTML += '<div class="sf-opt" onclick="selectSort(&#39;' + val + '&#39;,&#39;' + label + '&#39;)">' + label + '</div>';
+                }
+            })();
+
             /* 点击其他地方关闭下拉 */
             document.addEventListener('click', function(e) {
-                var el = e.target.closest ? e.target.closest('#siteFilterDisplay') : null;
-                if (!el) {
+                var el1 = e.target.closest ? e.target.closest('#siteFilterDisplay') : null;
+                var el2 = e.target.closest ? e.target.closest('#sortDisplay') : null;
+                if (!el1) {
                     var p = document.getElementById('siteDropdownPanel');
+                    if (p) p.style.display = 'none';
+                }
+                if (!el2) {
+                    var p = document.getElementById('sortDropdownPanel');
                     if (p) p.style.display = 'none';
                 }
             });
@@ -822,7 +842,20 @@ document.getElementById('note').style.height = '44px';
                 }
 
                 /* 组按 site A-Z 排序 */
-                var siteNames = Object.keys(groups).sort(function(a, b) { return a.localeCompare(b); });
+                var sortBy = document.getElementById('sortSelect').value;
+                var siteNames = Object.keys(groups).sort(function(a, b) {
+                    var ga = groups[a], gb = groups[b];
+                    switch (sortBy) {
+                        case 'oldest':
+                            return Math.min.apply(null, ga.map(function(x) { return x.id; })) - Math.min.apply(null, gb.map(function(x) { return x.id; }));
+                        case 'updated':
+                            return Math.max.apply(null, gb.map(function(x) { return new Date(x.updated_at || 0); })) - Math.max.apply(null, ga.map(function(x) { return new Date(x.updated_at || 0); }));
+                        case 'most':
+                            return gb.length - ga.length;
+                        default: /* newest */
+                            return Math.max.apply(null, gb.map(function(x) { return x.id; })) - Math.max.apply(null, ga.map(function(x) { return x.id; }));
+                    }
+                });
 
                 for (var g = 0; g < siteNames.length; g++) {
                     var site = siteNames[g];
