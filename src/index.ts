@@ -904,6 +904,7 @@ document.getElementById('note').style.height = '44px';
                 document.getElementById('editUsername').value = item.username;
                 document.getElementById('password').value = item.password;
                 document.getElementById('note').value = item.note;
+                autoResize(document.getElementById('note'));
                 updateStrengthIndicator();
                 /* 滚动到表单 */
                 document.querySelector('.card:nth-of-type(3)').scrollIntoView({ behavior: 'smooth' });
