@@ -309,7 +309,7 @@ app.get('/', (c) => {
                 <!-- 备注 -->
                 <div style="margin-bottom: 12px;">
                     <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">备注</div>
-                    <input type="text" id="note" placeholder="选填，如安全问题答案、绑定的手机号等" style="margin: 0;">
+                    <textarea id="note" rows="1" placeholder="选填，如安全问题答案、绑定的手机号等" oninput="autoResize(this)" style="margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;color:var(--text);background:var(--card-bg);resize:none;width:100%;box-sizing:border-box;font-family:inherit;line-height:1.5;overflow-y:auto;min-height:44px;max-height:120px;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
                 </div>
                 <!-- 按钮 -->
                 <div style="display: flex; gap: 10px;">
@@ -617,6 +617,7 @@ app.get('/', (c) => {
                 document.getElementById('password').type = 'text';
                 document.getElementById('togglePwdBtn').textContent = '🙈';
                 document.getElementById('note').value = '';
+document.getElementById('note').style.height = '44px';
                 updateStrengthIndicator();
             }
 
@@ -659,6 +660,7 @@ app.get('/', (c) => {
                         document.getElementById('editUsername').value = '';
                         document.getElementById('password').value = '';
                         document.getElementById('note').value = '';
+document.getElementById('note').style.height = '44px';
                         updateStrengthIndicator();
                     }
                     await loadSecrets();
@@ -820,7 +822,7 @@ app.get('/', (c) => {
 
                     for (var k = 0; k < items.length; k++) {
                         var item = items[k];
-                        var noteHtml = item.note ? '<div style="margin: 8px 0 0; font-size: 13px; color:var(--text-secondary); background: var(--item-bg); padding: 8px; border-radius: 6px; border: 1px solid var(--border);">📝 <strong>备注:</strong> ' + escapeHtml(item.note) + '</div>' : '';
+                        var noteHtml = item.note ? '<div style="margin:6px 0 0;font-size:13px;color:var(--text-secondary);background:var(--item-bg);padding:6px 10px;border-radius:6px;border:1px solid var(--border);word-break:break-word;white-space:pre-wrap;line-height:1.4;">📝 ' + escapeHtml(item.note).split('\\n').join('<br>') + '</div>' : '';
                         var timeHtml = '<div class="time-ago">🕐 ' + timeAgo(item.updated_at) + '</div>';
 
                         html += '<div class="secret-item">' +
@@ -1011,6 +1013,11 @@ app.get('/', (c) => {
                 el.style.opacity = '1';
                 clearTimeout(el._timer);
                 el._timer = setTimeout(function() { el.style.opacity = '0'; }, 1500);
+            }
+
+            function autoResize(el) {
+                el.style.height = '44px';
+                el.style.height = Math.min(el.scrollHeight, 120) + 'px';
             }
 
             function escapeHtml(string) {
