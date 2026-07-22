@@ -182,17 +182,12 @@ app.get('/', (c) => {
             button.small-btn { padding: 5px 10px; font-size: 12px; margin-left: 5px; }
             .form-group { margin-bottom: 15px; }
             .form-group label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 500; color: var(--text-secondary); }
-            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
             .secret-item { background: var(--item-bg); border: 1px solid var(--item-border); border-radius: 10px; padding: 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start; transition: background 0.3s; }
             .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #e2f6ea; color: #1a7f37; }
             .copy-btn { padding: 5px 10px; font-size: 12px; margin-left: 5px; }
             .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
             .logo { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
             .search-bar { padding: 12px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; width: 100%; box-sizing: border-box; background: var(--card-bg); color: var(--text); }
-            .generator-container { background: var(--card-bg); border: 1px dashed var(--border); padding: 15px; border-radius: 8px; margin-top: 10px; }
-            .generator-container input[type="checkbox"] { width: auto; margin-right: 5px; vertical-align: middle; }
-            .generator-container label { font-size: 14px; margin-right: 15px; cursor: pointer; white-space: nowrap; }
-            .generator-grid { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 8px; }
             .toggle-link { text-align: center; margin-top: 15px; font-size: 14px; color: var(--primary); cursor: pointer; text-decoration: underline; }
             .file-upload-label { display: inline-block; padding: 10px 16px; background: var(--secondary-bg); color: var(--text); border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: 600; transition: background 0.2s; text-align: center; margin: 8px 0; }
             .file-upload-label:hover { background: var(--border); }
@@ -222,10 +217,16 @@ app.get('/', (c) => {
 
             /* 编辑按钮行 */
             .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; margin-left: 15px; }
+            /* 置顶 */
             .pin-btn { background: #0071e3; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: auto; }
             .pin-btn:hover { background: #0077ed; }
             .pin-btn.active { background: #ff9f0a; }
             .pin-btn.active:hover { background: #ff9500; }
+            /* 分组 */
+            .group-header { background: #fef3c7; color: #92400e; padding: 12px 16px; border-radius: 10px; margin-bottom: 8px; cursor: pointer; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; user-select: none; transition: background 0.2s; border: 1px solid #fde68a; }
+            .group-header:hover { background: #fde68a; }
+            .group-header .count { font-size: 13px; opacity: 0.85; }
+            .group-body { margin-left: 8px; padding-left: 12px; border-left: 2px solid var(--border); margin-bottom: 12px; }
         </style>
     </head>
     <body>
@@ -271,43 +272,49 @@ app.get('/', (c) => {
 
             <div class="card">
                 <h3 style="text-align: left; margin-bottom: 15px;" id="saveFormTitle">➕ 保存新账号密码</h3>
-                <div class="grid">
-                    <input type="text" id="site" placeholder="网站域名 (如 github.com)">
-                    <input type="text" id="editUsername" placeholder="账号 / 邮箱 / 手机号">
+                <!-- 网站 -->
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">网站</div>
+                    <input type="text" id="site" placeholder="如 github.com" style="margin: 0;">
                 </div>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="text" id="password" placeholder="密码明文" style="flex-grow: 1;">
-                    <button class="secondary" onclick="toggleGenerator()" style="white-space: nowrap; margin:0;">生成器选项</button>
+                <!-- 账号 -->
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">账号</div>
+                    <input type="text" id="editUsername" placeholder="邮箱 / 手机号 / 用户名" style="margin: 0;">
                 </div>
-                <!-- 密码强度条 -->
-                <div id="strengthIndicator" style="display: none; margin-top: 4px;">
-                    <div class="strength-bar" id="strengthBar" style="width: 0%; background: transparent;"></div>
-                    <div class="strength-label" id="strengthLabel"></div>
-                </div>
-
-                <div style="margin-top: 10px;">
-                    <input type="text" id="note" placeholder="备注 (选填，如：绑定的手机号、安全问题答案等)">
-                </div>
-
-                <div id="generatorPanel" class="generator-container" style="display: none;">
-                    <strong>🛠️ 本地高强度密码生成器</strong>
-                    <div style="margin-top: 10px;">
-                        <label>
-                            长度: <input type="number" id="genLength" value="16" min="6" max="64" style="width: 60px; padding: 4px 8px; display:inline-block; margin-left: 5px;">
-                        </label>
+                <!-- 密码 -->
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">密码</div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <input type="text" id="password" placeholder="密码明文或点击生成" style="flex-grow: 1; margin: 0;">
+                        <button class="secondary" id="togglePwdBtn" onclick="togglePwdVisibility()" title="隐藏密码" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">🙈</button>
+                        <button class="secondary" onclick="generatePassword()" title="一键生成密码" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">🔑</button>
+                        <button class="secondary" id="genSettingsBtn" onclick="toggleGenSettings()" title="生成器设置" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">⚙</button>
                     </div>
-                    <div class="generator-grid">
-                        <label><input type="checkbox" id="genUpper" checked> 大写字母</label>
-                        <label><input type="checkbox" id="genLower" checked> 小写字母</label>
-                        <label><input type="checkbox" id="genNumber" checked> 数字</label>
-                        <label><input type="checkbox" id="genSymbols" checked> 特殊符号</label>
+                    <div id="strengthIndicator" style="display: none; margin-top: 4px;">
+                        <div class="strength-bar" id="strengthBar" style="width: 0%; background: transparent;"></div>
+                        <div class="strength-label" id="strengthLabel"></div>
                     </div>
-                    <button class="secondary" onclick="generatePassword()" style="font-size: 12px; padding: 6px 12px; margin-top: 10px; width: auto;">生成并填入</button>
+                    <!-- 生成器设置（默认收起，放在密码下面） -->
+                    <div id="genSettingsPanel" style="display: none; margin-top: 8px; padding: 10px 12px; background: var(--item-bg); border-radius: 8px; border: 1px solid var(--border);">
+                        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px;">
+                            <span>长度 <input type="number" id="genLength" value="16" min="6" max="64" style="width: 48px; padding: 4px 6px; margin: 0; display: inline-block;"></span>
+                            <label style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer; margin: 0;"><input type="checkbox" id="genUpper" checked style="width: auto; margin: 0;">A-Z</label>
+                            <label style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer; margin: 0;"><input type="checkbox" id="genLower" checked style="width: auto; margin: 0;">a-z</label>
+                            <label style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer; margin: 0;"><input type="checkbox" id="genNumber" checked style="width: auto; margin: 0;">0-9</label>
+                            <label style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer; margin: 0;"><input type="checkbox" id="genSymbols" checked style="width: auto; margin: 0;">@#$</label>
+                        </div>
+                    </div>
                 </div>
-
+                <!-- 备注 -->
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">备注</div>
+                    <input type="text" id="note" placeholder="选填，如安全问题答案、绑定的手机号等" style="margin: 0;">
+                </div>
+                <!-- 按钮 -->
                 <div style="display: flex; gap: 10px;">
-                    <button onclick="saveSecret()" style="margin-top: 15px; flex-grow: 1;" id="saveBtn">加密并存入云端</button>
-                    <button class="secondary" onclick="cancelEdit()" id="cancelEditBtn" style="margin-top: 15px; display: none;">取消编辑</button>
+                    <button onclick="saveSecret()" style="margin-top: 4px; flex-grow: 1;" id="saveBtn">加密并存入云端</button>
+                    <button class="secondary" onclick="cancelEdit()" id="cancelEditBtn" style="margin-top: 4px; display: none;">取消编辑</button>
                 </div>
             </div>
 
@@ -581,7 +588,7 @@ app.get('/', (c) => {
 
                 document.getElementById('authCard').style.display = "block";
                 document.getElementById('mainWorkspace').style.display = "none";
-                document.getElementById('generatorPanel').style.display = "none";
+                document.getElementById('genSettingsPanel').style.display = "none";
                 document.getElementById('list').innerHTML = '';
                 cancelEdit();
             }
@@ -597,6 +604,8 @@ app.get('/', (c) => {
                 document.getElementById('site').value = '';
                 document.getElementById('editUsername').value = '';
                 document.getElementById('password').value = '';
+                document.getElementById('password').type = 'text';
+                document.getElementById('togglePwdBtn').textContent = '🙈';
                 document.getElementById('note').value = '';
                 updateStrengthIndicator();
             }
@@ -709,43 +718,89 @@ app.get('/', (c) => {
             }
 
             function renderSecrets(secrets) {
-                const listDiv = document.getElementById('list');
-                listDiv.innerHTML = '';
+                var listDiv = document.getElementById('list');
                 if (secrets.length === 0) {
                     listDiv.innerHTML = '<p style="color:var(--text-secondary); text-align:center;">此账号箱子中暂无密码记录。</p>';
                     return;
                 }
-                secrets.forEach(function(item) {
-                    const noteHtml = item.note ? '<div style="margin: 8px 0 0; font-size: 13px; color:var(--text-secondary); background: var(--item-bg); padding: 8px; border-radius: 6px; border: 1px solid var(--border);">📝 <strong>备注:</strong> ' + escapeHtml(item.note) + '</div>' : '';
-                    const timeHtml = '<div class="time-ago">🕐 ' + timeAgo(item.updated_at) + '</div>';
 
-                    listDiv.innerHTML += \`
-                        <div class="secret-item">
-                            <div style="flex-grow: 1;">
-                                <strong style="font-size: 16px; display:block; color:var(--text);">\${escapeHtml(item.site)}
-                                    <button class="secondary" onclick="window.open('https://\${item.site}', '_blank')" style="padding: 2px 8px; font-size: 11px; margin: 0 0 0 8px; width: auto; display: inline;">打开网页</button>
-                                </strong>
-                                <div style="margin: 6px 0 0; font-size: 14px; color:var(--text-secondary);">
-                                    账号: <span id="user-\${item.id}">\${escapeHtml(item.username)}</span>
-                                    <button class="secondary copy-btn" onclick="copyToClipboard('user-\${item.id}', '账号已复制')">复制</button>
-                                </div>
-                                <div style="margin: 4px 0 0; font-size: 14px; color:var(--text-secondary);">
-                                    密码: <span id="pwd-\${item.id}" style="-webkit-text-security: disc;">\${escapeHtml(item.password)}</span>
-                                    <button class="secondary copy-btn" onclick="togglePasswordVisibility('pwd-\${item.id}', this)">显示</button>
-                                    <button class="secondary copy-btn" onclick="copyToClipboard('pwd-\${item.id}', '密码已复制')">复制</button>
-                                </div>
-                                \${noteHtml}
-                                \${timeHtml}
-                            </div>
-                            <div class="item-actions">
-                                <button class="pin-btn\${item.pinned ? ' active' : ''}" onclick="togglePin(\${item.id})">\${item.pinned ? '📌 取消置顶' : '📌 置顶'}</button>
-                                <button class="secondary small-btn" onclick="editSecret(\${item.id})" style="width: auto;">✏️ 编辑</button>
-                                <button class="danger small-btn" onclick="deleteSecret(\${item.id})" style="width: auto;">删除</button>
-                            </div>
-                        </div>
-                    \`;
-                });
+                /* 先拼完整 HTML，再一次赋值，避免 innerHTML += 导致浏览器自动闭合未完成的 div */
+                var html = '';
+
+                /* 按 site 分组 */
+                var groups = {};
+                for (var gi = 0; gi < secrets.length; gi++) {
+                    var gitem = secrets[gi];
+                    if (!groups[gitem.site]) groups[gitem.site] = [];
+                    groups[gitem.site].push(gitem);
+                }
+
+                /* 组按 site A-Z 排序 */
+                var siteNames = Object.keys(groups).sort(function(a, b) { return a.localeCompare(b); });
+
+                for (var g = 0; g < siteNames.length; g++) {
+                    var site = siteNames[g];
+                    var items = groups[site];
+                    var expanded = items.length <= 2;
+                    var groupId = 'group-' + g;
+
+                    /* 组头 */
+                    html += '<div class="group-header" data-group="' + groupId + '" id="' + groupId + '-head">' +
+                        '<span>' + escapeHtml(site) + ' <button class="secondary" onclick="event.stopPropagation();navigator.clipboard.writeText(&#39;' + escapeHtml(site) + '&#39;);showToast(&#39;网址已复制&#39;)" style="padding:2px 8px;font-size:11px;margin:0 0 0 8px;width:auto;display:inline;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);">复制</button>' +
+                        ' <button class="secondary" onclick="event.stopPropagation();window.open(\\'https://' + escapeHtml(site) + '\\',\\'_blank\\')" style="padding:2px 8px;font-size:11px;margin:0 0 0 4px;width:auto;display:inline;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);">打开</button> <span class="count">(' + items.length + ' 个账号)</span></span>' +
+                        '<span id="' + groupId + '-arrow">' + (expanded ? '▾' : '▸') + '</span>' +
+                    '</div>';
+
+                    /* 组内容 */
+                    html += '<div class="group-body" id="' + groupId + '" style="' + (expanded ? '' : 'display: none;') + '">';
+
+                    for (var k = 0; k < items.length; k++) {
+                        var item = items[k];
+                        var noteHtml = item.note ? '<div style="margin: 8px 0 0; font-size: 13px; color:var(--text-secondary); background: var(--item-bg); padding: 8px; border-radius: 6px; border: 1px solid var(--border);">📝 <strong>备注:</strong> ' + escapeHtml(item.note) + '</div>' : '';
+                        var timeHtml = '<div class="time-ago">🕐 ' + timeAgo(item.updated_at) + '</div>';
+
+                        html += '<div class="secret-item">' +
+                            '<div style="flex-grow: 1;">' +
+                                '<div style="margin: 6px 0 0; font-size: 14px; color:var(--text-secondary);">' +
+                                    '账号: <span id="user-' + item.id + '">' + escapeHtml(item.username) + '</span>' +
+                                    '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;user-' + item.id + '&#39;, &#39;账号已复制&#39;)">复制</button>' +
+                                '</div>' +
+                                '<div style="margin: 4px 0 0; font-size: 14px; color:var(--text-secondary);">' +
+                                    '密码: <span id="pwd-' + item.id + '" style="-webkit-text-security: disc;">' + escapeHtml(item.password) + '</span>' +
+                                    '<button class="secondary copy-btn" onclick="togglePasswordVisibility(&#39;pwd-' + item.id + '&#39;, this)">显示</button>' +
+                                    '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;pwd-' + item.id + '&#39;, &#39;密码已复制&#39;)">复制</button>' +
+                                '</div>' +
+                                noteHtml + timeHtml +
+                            '</div>' +
+                            '<div class="item-actions">' +
+                                '<button class="pin-btn' + (item.pinned ? ' active' : '') + '" onclick="togglePin(' + item.id + ')">' + (item.pinned ? '📌 取消置顶' : '📌 置顶') + '</button>' +
+                                '<button class="secondary small-btn" onclick="editSecret(' + item.id + ')" style="width: auto;">✏️ 编辑</button>' +
+                                '<button class="danger small-btn" onclick="deleteSecret(' + item.id + ')" style="width: auto;">删除</button>' +
+                            '</div>' +
+                        '</div>';
+                    }
+
+                    html += '</div>'; /* group-body */
+                }
+
+                listDiv.innerHTML = html;
             }
+
+            document.getElementById('list').addEventListener('click', function(e) {
+                var el = e.target.closest('.group-header');
+                if (!el) return;
+                var groupId = el.getAttribute('data-group');
+                var body = document.getElementById(groupId);
+                var arrow = document.getElementById(groupId + '-arrow');
+                if (!body) return;
+                if (body.style.display === 'none') {
+                    body.style.display = '';
+                    arrow.textContent = '▾';
+                } else {
+                    body.style.display = 'none';
+                    arrow.textContent = '▸';
+                }
+            });
 
             /* ====== 编辑功能 ====== */
             function editSecret(id) {
@@ -792,9 +847,19 @@ app.get('/', (c) => {
             }
 
             /* ====== 密码生成器 ====== */
-            function toggleGenerator() {
-                const panel = document.getElementById('generatorPanel');
+            function toggleGenSettings() {
+                const panel = document.getElementById('genSettingsPanel');
                 panel.style.display = panel.style.display === "none" ? "block" : "none";
+            }
+
+            function togglePwdVisibility() {
+                var input = document.getElementById('password');
+                var btn = document.getElementById('togglePwdBtn');
+                if (input.type === 'password') {
+                    input.type = 'text'; btn.textContent = '🙈';
+                } else {
+                    input.type = 'password'; btn.textContent = '👁';
+                }
             }
 
             function generatePassword() {
