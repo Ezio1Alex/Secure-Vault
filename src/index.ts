@@ -227,6 +227,25 @@ app.get('/', (c) => {
             .group-header:hover { background: #fde68a; }
             .group-header .count { font-size: 13px; opacity: 0.85; }
             .group-body { margin-left: 8px; padding-left: 12px; border-left: 2px solid var(--border); margin-bottom: 12px; }
+            /* 移动端适配 */
+            @media (max-width: 640px) {
+                body { padding: 10px; }
+                .card { padding: 16px; border-radius: 12px; }
+                .logo { font-size: 17px; }
+                .sort-bar { flex-wrap: wrap; gap: 6px; }
+                .sort-bar > select { width: auto; flex: 1; min-width: 0; font-size: 13px; padding: 8px; }
+                .sort-bar > div { width: 100%; order: 3; }
+                .group-header { font-size: 14px; padding: 10px 12px; }
+                .secret-item { flex-direction: column; gap: 10px; }
+                .item-actions { flex-direction: row; margin-left: 0; width: 100%; gap: 8px; }
+                .item-actions button { flex: 1; padding: 10px !important; font-size: 13px !important; text-align: center; }
+                .copy-btn { padding: 6px 10px; font-size: 13px; min-width: 44px; min-height: 36px; }
+                .group-body { margin-left: 0; padding-left: 8px; }
+                #authCard { margin: 40px auto 0 !important; }
+                .header { flex-wrap: wrap; gap: 8px; }
+                .header .danger { font-size: 12px !important; padding: 6px 10px !important; }
+                #togglePwdBtn, #genSettingsBtn, [onclick="generatePassword()"] { min-width: 44px; min-height: 44px; font-size: 16px !important; padding: 10px 12px !important; }
+            }
         </style>
     </head>
     <body>
