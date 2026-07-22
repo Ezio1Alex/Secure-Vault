@@ -216,12 +216,14 @@ app.get('/', (c) => {
             .time-ago { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
             /* 编辑按钮行 */
-            .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; margin-left: 15px; }
             /* 置顶 */
             .pin-btn { background: #0071e3; color: white; padding: 5px 10px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; width: auto; }
             .pin-btn:hover { background: #0077ed; }
             .pin-btn.active { background: #ff9f0a; }
             .pin-btn.active:hover { background: #ff9500; }
+            .pin-btn-top { background: none; border: none; cursor: pointer; font-size: 14px; padding: 4px; margin: 0; width: auto; line-height: 1; position: absolute; top: 4px; right: 4px; z-index: 1; }
+            .pin-btn-top:hover { background: var(--secondary-bg); border-radius: 4px; }
+            .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; margin-left: 15px; padding-top: 26px; }
             /* 分组 */
             .group-header { background: #fef3c7; color: #92400e; padding: 12px 16px; border-radius: 10px; margin-bottom: 8px; cursor: pointer; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; user-select: none; transition: background 0.2s; border: 1px solid #fde68a; }
             .group-header:hover { background: #fde68a; }
@@ -237,7 +239,7 @@ app.get('/', (c) => {
                 .sort-bar > div { width: 100%; order: 3; }
                 .group-header { font-size: 14px; padding: 10px 12px; }
                 .secret-item { flex-direction: column; gap: 10px; }
-                .item-actions { flex-direction: row; margin-left: 0; width: 100%; gap: 8px; }
+                .item-actions { flex-direction: row; margin-left: 0; width: 100%; gap: 8px; padding-top: 0; }
                 .item-actions button { flex: 1; padding: 10px !important; font-size: 13px !important; text-align: center; }
                 .copy-btn { padding: 6px 10px; font-size: 13px; min-width: 44px; min-height: 36px; }
                 .group-body { margin-left: 0; padding-left: 8px; }
@@ -844,21 +846,21 @@ document.getElementById('note').style.height = '44px';
                         var noteHtml = item.note ? '<div style="margin:6px 0 0;font-size:13px;color:var(--text-secondary);background:var(--item-bg);padding:6px 10px;border-radius:6px;border:1px solid var(--border);word-break:break-word;white-space:pre-wrap;line-height:1.4;">📝 ' + escapeHtml(item.note).split('\\n').join('<br>') + '</div>' : '';
                         var timeHtml = '<div class="time-ago">🕐 ' + timeAgo(item.updated_at) + '</div>';
 
-                        html += '<div class="secret-item">' +
+                        html += '<div class="secret-item" style="position:relative;">' +
+                            '<button class="pin-btn-top" onclick="togglePin(' + item.id + ')" title="' + (item.pinned ? '取消置顶' : '置顶') + '">' + (item.pinned ? '📌' : '📍') + '</button>' +
                             '<div style="flex-grow: 1;">' +
                                 '<div style="margin: 6px 0 0; font-size: 14px; color:var(--text-secondary);">' +
                                     '账号: <span id="user-' + item.id + '">' + escapeHtml(item.username) + '</span>' +
                                     '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;user-' + item.id + '&#39;, &#39;账号已复制&#39;)">复制</button>' +
                                 '</div>' +
                                 '<div style="margin: 4px 0 0; font-size: 14px; color:var(--text-secondary);">' +
-                                    '密码: <span id="pwd-' + item.id + '" style="-webkit-text-security: disc;">' + escapeHtml(item.password) + '</span>' +
+                                    '密码: <span id="pwd-' + item.id + '" data-pwd="' + escapeHtml(item.password) + '">•••••••</span>' +
                                     '<button class="secondary copy-btn" onclick="togglePasswordVisibility(&#39;pwd-' + item.id + '&#39;, this)">显示</button>' +
                                     '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;pwd-' + item.id + '&#39;, &#39;密码已复制&#39;)">复制</button>' +
                                 '</div>' +
                                 noteHtml + timeHtml +
                             '</div>' +
                             '<div class="item-actions">' +
-                                '<button class="pin-btn' + (item.pinned ? ' active' : '') + '" onclick="togglePin(' + item.id + ')">' + (item.pinned ? '📌 取消置顶' : '📌 置顶') + '</button>' +
                                 '<button class="secondary small-btn" onclick="editSecret(' + item.id + ')" style="width: auto;">✏️ 编辑</button>' +
                                 '<button class="danger small-btn" onclick="deleteSecret(' + item.id + ')" style="width: auto;">删除</button>' +
                             '</div>' +
@@ -1007,16 +1009,20 @@ document.getElementById('note').style.height = '44px';
             }
 
             function togglePasswordVisibility(id, btn) {
-                const el = document.getElementById(id);
-                if (el.style.webkitTextSecurity === "disc" || el.style.webkitTextSecurity === "") {
-                    el.style.webkitTextSecurity = "none"; btn.innerText = "隐藏";
+                var el = document.getElementById(id);
+                if (el.textContent === '•••••••') {
+                    el.textContent = el.getAttribute('data-pwd');
+                    btn.innerText = '隐藏';
                 } else {
-                    el.style.webkitTextSecurity = "disc"; btn.innerText = "显示";
+                    el.textContent = '•••••••';
+                    btn.innerText = '显示';
                 }
             }
 
             function copyToClipboard(elementId, msg) {
-                navigator.clipboard.writeText(document.getElementById(elementId).textContent);
+                var el = document.getElementById(elementId);
+                var text = el.getAttribute('data-pwd') || el.textContent;
+                navigator.clipboard.writeText(text);
                 showToast(msg || '已复制');
             }
 
