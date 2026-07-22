@@ -899,14 +899,34 @@ app.get('/', (c) => {
 
             function togglePin(id) {
                 if (!cachedAuthKey) return;
-                /* 先本地翻转 + 渲染，再异步发请求 */
+                /* 先本地翻转 */
                 for (var i = 0; i < allDecryptedSecrets.length; i++) {
                     if (allDecryptedSecrets[i].id === id) {
                         allDecryptedSecrets[i].pinned = allDecryptedSecrets[i].pinned ? 0 : 1;
                         break;
                     }
                 }
+                /* 保存展开状态 */
+                var expandedState = {};
+                var oldBodies = document.querySelectorAll('.group-body');
+                for (var i = 0; i < oldBodies.length; i++) {
+                    expandedState[oldBodies[i].id] = oldBodies[i].style.display !== 'none';
+                }
                 renderSecrets(getFilteredAndSorted());
+                /* 恢复展开状态 */
+                for (var key in expandedState) {
+                    var body = document.getElementById(key);
+                    var arrow = document.getElementById(key + '-arrow');
+                    if (body) {
+                        if (expandedState[key]) {
+                            body.style.display = '';
+                            if (arrow) arrow.textContent = '▾';
+                        } else {
+                            body.style.display = 'none';
+                            if (arrow) arrow.textContent = '▸';
+                        }
+                    }
+                }
                 fetch('/api/secrets/' + id + '/pin', { method: 'POST', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
             }
 
