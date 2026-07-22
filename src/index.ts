@@ -322,14 +322,24 @@ app.get('/', (c) => {
                 <h3 style="text-align: left; margin-bottom: 15px;">📋 已保存的凭证</h3>
                 <div class="sort-bar">
                     <label>排序：</label>
-                    <select id="sortSelect" onchange="renderSecrets(getFilteredAndSorted())">
+                    <select id="sortSelect" onchange="filterSecrets()">
                         <option value="newest">最近添加</option>
                         <option value="oldest">最早添加</option>
                         <option value="alpha-asc">网站名 A→Z</option>
                         <option value="alpha-desc">网站名 Z→A</option>
                         <option value="updated">最近更新</option>
                     </select>
-                    <input type="text" id="searchBar" class="search-bar" placeholder="🔍 搜索网站、账号名称或备注..." oninput="filterSecrets()" style="margin: 0; flex-grow: 1;">
+                    <div style="display: flex; flex-grow: 1; border: 1px solid var(--border); border-radius: 8px; overflow: visible; margin: 0; background: var(--card-bg); position: relative;">
+                        <div id="siteFilterDisplay" onclick="toggleSiteDropdown(event)" style="padding: 8px 12px; white-space: nowrap; cursor: pointer; font-size: 14px; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 4px; user-select: none; background: var(--card-bg); color: var(--text); border-radius: 8px 0 0 8px;">
+                            <span id="siteFilterLabel">全部网站</span> <span style="font-size: 10px;">▾</span>
+                        </div>
+                        <select id="siteFilter" onchange="filterSecrets()" style="display: none;">
+                            <option value="">全部网站</option>
+                        </select>
+                        <!-- 自定义下拉面板 -->
+                        <div id="siteDropdownPanel" style="display: none; position: absolute; top: 100%; left: 0; min-width: 180px; max-height: 250px; overflow-y: auto; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 1000; margin-top: 4px; padding: 4px 0;"></div>
+                        <input type="text" id="searchBar" class="search-bar" placeholder="🔍 搜索账号或备注..." oninput="filterSecrets()" style="margin: 0 !important; flex-grow: 1; border: none !important; padding: 8px 12px !important; border-radius: 0 !important;">
+                    </div>
                 </div>
                 <div id="list"></div>
             </div>
@@ -691,8 +701,11 @@ app.get('/', (c) => {
             function getFilteredAndSorted() {
                 const query = document.getElementById('searchBar').value.toLowerCase();
                 const sortBy = document.getElementById('sortSelect').value;
+                const siteFilter = document.getElementById('siteFilter').value;
 
                 var filtered = allDecryptedSecrets.filter(function(item) {
+                    /* 网址筛选 */
+                    if (siteFilter && item.site !== siteFilter) return false;
                     return item.site.toLowerCase().includes(query) ||
                            item.username.toLowerCase().includes(query) ||
                            item.note.toLowerCase().includes(query);
@@ -710,8 +723,58 @@ app.get('/', (c) => {
                         default: return b.id - a.id;
                     }
                 });
+
+                /* 更新网址筛选下拉 */
+                updateSiteFilter();
+
                 return filtered;
             }
+
+            function updateSiteFilter() {
+                var sel = document.getElementById('siteFilter');
+                var panel = document.getElementById('siteDropdownPanel');
+                var cur = sel.value;
+                var sites = {};
+                for (var i = 0; i < allDecryptedSecrets.length; i++) {
+                    sites[allDecryptedSecrets[i].site] = true;
+                }
+                var siteList = Object.keys(sites).sort(function(a, b) { return a.localeCompare(b); });
+                sel.innerHTML = '<option value="">全部网站</option>';
+                panel.innerHTML = '<div class="sf-opt"' + (cur === '' ? ' style="font-weight:600;background:var(--secondary-bg);"' : '') + ' onclick="selectSite(&#39;&#39;)">全部网站</div>';
+                for (var i = 0; i < siteList.length; i++) {
+                    sel.innerHTML += '<option value="' + siteList[i] + '"' + (siteList[i] === cur ? ' selected' : '') + '>' + siteList[i] + '</option>';
+                    panel.innerHTML += '<div class="sf-opt"' + (siteList[i] === cur ? ' style="font-weight:600;background:var(--secondary-bg);"' : '') + ' onclick="selectSite(&#39;' + siteList[i] + '&#39;)">' + escapeHtml(siteList[i]) + '</div>';
+                }
+            }
+
+            function toggleSiteDropdown(e) {
+                if (e) e.stopPropagation();
+                var panel = document.getElementById('siteDropdownPanel');
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            }
+
+            function selectSite(val) {
+                document.getElementById('siteFilter').value = val;
+                document.getElementById('siteFilterLabel').textContent = val || '全部网站';
+                document.getElementById('siteDropdownPanel').style.display = 'none';
+                document.getElementById('siteFilter').dispatchEvent(new Event('change'));
+            }
+
+            /* 点击其他地方关闭下拉 */
+            document.addEventListener('click', function(e) {
+                var el = e.target.closest ? e.target.closest('#siteFilterDisplay') : null;
+                if (!el) {
+                    var p = document.getElementById('siteDropdownPanel');
+                    if (p) p.style.display = 'none';
+                }
+            });
+
+            /* 自定义下拉选项样式 */
+            (function() {
+                var style = document.createElement('style');
+                style.textContent = '.sf-opt{padding:8px 14px;cursor:pointer;font-size:14px;border-radius:6px;margin:2px 4px}.sf-opt:hover{background:var(--secondary-bg)}';
+                document.head.appendChild(style);
+            })();
 
             function filterSecrets() {
                 renderSecrets(getFilteredAndSorted());
@@ -741,7 +804,8 @@ app.get('/', (c) => {
                 for (var g = 0; g < siteNames.length; g++) {
                     var site = siteNames[g];
                     var items = groups[site];
-                    var expanded = items.length <= 2;
+                    var siteFilter = document.getElementById('siteFilter').value;
+                    var expanded = siteFilter !== '' || items.length <= 2;
                     var groupId = 'group-' + g;
 
                     /* 组头 */
