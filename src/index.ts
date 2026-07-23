@@ -734,8 +734,11 @@ document.getElementById('note').style.height = '44px';
                            item.note.toLowerCase().includes(query);
                 });
 
-                /* 组内统一按 id DESC（最新在前），group ordering 在 renderSecrets 里处理 */
-                filtered.sort(function(a, b) { return b.id - a.id; });
+                /* 组内统一按置顶优先 + id DESC */
+                filtered.sort(function(a, b) {
+                    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+                    return b.id - a.id;
+                });
 
                 updateSiteFilter();
                 return filtered;
