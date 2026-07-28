@@ -7,6 +7,10 @@ type AppEnv = {
 
 const app = new Hono<AppEnv>();
 
+function _t(c: Context, zh: string, en: string): string {
+  return c.req.header('x-lang')?.startsWith('en') ? en : zh;
+}
+
 app.get('/api/salt', async (c) => {
   try {
     let saltRow = await c.env.DB.prepare("SELECT value FROM vault_config WHERE key = 'master_salt'").first() as { value: string } | null;
@@ -25,30 +29,30 @@ app.get('/api/salt', async (c) => {
 
 app.post('/api/register', async (c) => {
   const { username, auth_key } = await c.req.json();
-  if (!username || !auth_key) return c.json({ error: "参数不完整" }, 400);
+  if (!username || !auth_key) return c.json({ error: _t(c, "参数不完整", "Incomplete parameters") }, 400);
 
   try {
     const userCount = await c.env.DB.prepare("SELECT COUNT(*) as count FROM users").first() as { count: number } | null;
     if (userCount && userCount.count >= 5) {
-      return c.json({ error: "🚨 注册通道已关闭：当前私有密码箱已达到最大允许账号数 (5个)！" }, 403);
+      return c.json({ error: _t(c, "🚨 注册通道已关闭：当前私有密码箱已达到最大允许账号数 (5个)！", "🚨 Registration closed (max 5 accounts)") }, 403);
     }
     const cleanUsername = username.trim().toLowerCase();
     await c.env.DB.prepare("INSERT INTO users (username, password_hash) VALUES (?, ?)").bind(cleanUsername, auth_key).run();
     return c.json({ success: true });
   } catch (err: any) {
-    if (err.message && err.message.includes("UNIQUE")) return c.json({ error: "该账号已被注册，请换一个用户名" }, 400);
-    return c.json({ error: "注册失败: " + err.message }, 500);
+    if (err.message && err.message.includes("UNIQUE")) return c.json({ error: _t(c, "该账号已被注册，请换一个用户名", "Username already taken") }, 400);
+    return c.json({ error: _t(c, "注册失败", "Registration failed") + ": " + err.message }, 500);
   }
 });
 
 app.post('/api/login', async (c) => {
   const { username, auth_key } = await c.req.json();
-  if (!username || !auth_key) return c.json({ error: "参数不完整" }, 400);
+  if (!username || !auth_key) return c.json({ error: _t(c, "参数不完整", "Incomplete parameters") }, 400);
 
   const cleanUsername = username.trim().toLowerCase();
   try {
     const user = await c.env.DB.prepare("SELECT password_hash FROM users WHERE username = ?").bind(cleanUsername).first() as { password_hash: string } | null;
-    if (!user || user.password_hash !== auth_key) return c.json({ error: "账号或密码错误" }, 401);
+    if (!user || user.password_hash !== auth_key) return c.json({ error: _t(c, "账号或密码错误", "Wrong username or password") }, 401);
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -58,11 +62,11 @@ app.post('/api/login', async (c) => {
 const authMiddleware = async (c: Context<AppEnv>, next: Next) => {
   const username = c.req.header('x-username');
   const authKey = c.req.header('x-auth-key');
-  if (!username || !authKey) return c.json({ error: "未授权的访问" }, 401);
+  if (!username || !authKey) return c.json({ error: _t(c, "未授权的访问", "Unauthorized access") }, 401);
 
   const cleanUsername = username.trim().toLowerCase();
   const user = await c.env.DB.prepare("SELECT password_hash FROM users WHERE username = ?").bind(cleanUsername).first() as { password_hash: string } | null;
-  if (!user || user.password_hash !== authKey) return c.json({ error: "身份核验失败，请重新登录" }, 401);
+  if (!user || user.password_hash !== authKey) return c.json({ error: _t(c, "身份核验失败，请重新登录", "Auth verification failed, please log in again") }, 401);
 
   c.set('username', cleanUsername);
   await next();
@@ -81,7 +85,7 @@ app.get('/api/secrets', authMiddleware, async (c) => {
 app.post('/api/secrets', authMiddleware, async (c) => {
   const username = c.get('username');
   const { encrypted_data, iv } = await c.req.json();
-  if (!encrypted_data || !iv) return c.json({ error: "参数不完整" }, 400);
+  if (!encrypted_data || !iv) return c.json({ error: _t(c, "参数不完整", "Incomplete parameters") }, 400);
 
   await c.env.DB.prepare("INSERT INTO passwords (username, encrypted_data, iv, updated_at, pinned) VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)").bind(username, encrypted_data, iv).run();
   return c.json({ success: true });
@@ -91,14 +95,14 @@ app.put('/api/secrets/:id', authMiddleware, async (c) => {
   const id = c.req.param('id');
   const username = c.get('username');
   const { encrypted_data, iv, touch_timestamp } = await c.req.json();
-  if (!encrypted_data || !iv) return c.json({ error: "参数不完整" }, 400);
+  if (!encrypted_data || !iv) return c.json({ error: _t(c, "参数不完整", "Incomplete parameters") }, 400);
 
   try {
     const sql = touch_timestamp === false
       ? "UPDATE passwords SET encrypted_data = ?, iv = ? WHERE id = ? AND username = ?"
       : "UPDATE passwords SET encrypted_data = ?, iv = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND username = ?";
     const result = await c.env.DB.prepare(sql).bind(encrypted_data, iv, id, username).run();
-    if (result.meta.changes === 0) return c.json({ error: "记录不存在或无权修改" }, 404);
+    if (result.meta.changes === 0) return c.json({ error: _t(c, "记录不存在或无权修改", "Record not found or no permission") }, 404);
     return c.json({ success: true });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
@@ -134,7 +138,7 @@ app.get('/', (c) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>私人密码箱</title>
+        <title data-i18n="app.title">私人密码箱</title>
         <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔒</text></svg>">
         <style>
             :root {
@@ -251,19 +255,21 @@ app.get('/', (c) => {
 
         <div id="lockWarning" class="lock-warning">⏰ 30 秒后因闲置自动锁定</div>
 
-        <div class="card" id="authCard" style="max-width: 400px; margin: 80px auto 0;">
+        <div class="card" id="authCard" style="max-width: 400px; margin: 80px auto 0; position: relative;">
+            <button id="langToggleAuth" onclick="switchLanguage(currentLang === 'zh' ? 'en' : 'zh')" style="position:absolute;top:12px;right:16px;padding:3px 8px;font-size:11px;font-weight:600;line-height:1;margin:0;width:auto;white-space:nowrap;background:var(--secondary-bg);color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;cursor:pointer;">EN</button>
+            <button id="themeToggleAuth" onclick="toggleTheme()" style="position:absolute;top:12px;right:56px;padding:3px 8px;font-size:11px;line-height:1;margin:0;width:auto;background:var(--secondary-bg);color:var(--text-secondary);border:1px solid var(--border);border-radius:6px;cursor:pointer;">🌙</button>
             <h2 id="authTitle">🔑 密码箱登录</h2>
             <div class="form-group">
-                <label>登录账号 (Username)</label>
-                <input type="text" id="usernameInput" placeholder="输入你的账号名称">
+                <label data-i18n="auth.label.username">登录账号 (Username)</label>
+                <input type="text" id="usernameInput" data-i18n-placeholder="auth.placeholder.username" placeholder="输入你的账号名称">
             </div>
             <div class="form-group">
-                <label>登录密码 (Master Password)</label>
-                <input type="password" id="passwordInput" placeholder="输入登录密码" onkeyup="if(event.key==='Enter') handleAuth()">
+                <label data-i18n="auth.label.password">登录密码 (Master Password)</label>
+                <input type="password" id="passwordInput" data-i18n-placeholder="auth.placeholder.password" placeholder="输入登录密码" onkeyup="if(event.key==='Enter') handleAuth()">
             </div>
             <div class="form-group" id="confirmPasswordGroup" style="display: none;">
-                <label>确认密码 (Confirm Password)</label>
-                <input type="password" id="confirmPasswordInput" placeholder="请再次输入登录密码" onkeyup="if(event.key==='Enter') handleAuth()">
+                <label data-i18n="auth.label.confirm">确认密码 (Confirm Password)</label>
+                <input type="password" id="confirmPasswordInput" data-i18n-placeholder="auth.placeholder.confirm" placeholder="请再次输入登录密码" onkeyup="if(event.key==='Enter') handleAuth()">
             </div>
             <button id="authBtn" onclick="handleAuth()" style="margin-top: 10px;">登 录</button>
             <div class="toggle-link" id="authToggle" onclick="toggleAuthMode()">没有账号？立即注册</div>
@@ -271,19 +277,20 @@ app.get('/', (c) => {
 
         <div id="mainWorkspace" style="display: none;">
             <div class="header">
-                <div class="logo">🔒 私人密码箱 <span style="font-size: 13px; color: var(--text-secondary); font-weight: normal;" id="currentUserLabel"></span></div>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="切换深色模式">🌙</button>
-                    <button class="danger" onclick="logout()" style="padding: 6px 12px; font-size: 13px; margin: 0;">安全退出</button>
+                <div class="logo"><span data-i18n="app.logo">🔒 私人密码箱</span> <span style="font-size: 13px; color: var(--text-secondary); font-weight: normal;" id="currentUserLabel"></span></div>
+                <div style="display: flex; gap: 6px; align-items: center;">
+                    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" data-i18n-title="header.theme" title="切换深色模式" style="padding: 6px 10px; font-size: 14px; line-height: 1; margin: 0; width: auto;">🌙</button>
+                    <button id="langToggle" onclick="switchLanguage(currentLang === 'zh' ? 'en' : 'zh')" style="padding:6px 10px;font-size:12px;font-weight:600;line-height:1;margin:0;width:auto;white-space:nowrap;background:var(--secondary-bg);color:var(--text);border:1px solid var(--border);border-radius:8px;cursor:pointer;">EN</button>
+                    <button class="danger" data-i18n="header.logout" onclick="logout()" style="padding: 6px 10px; font-size: 12px; line-height: 1; margin: 0;">安全退出</button>
                 </div>
             </div>
 
             <div class="card">
-                <h3 style="text-align: left; margin-bottom: 10px;">💽 数据备份与恢复 (离线 JSON)</h3>
-                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 15px;">零知识架构下若遗忘密码数据将永久丢失。请务必定期导出未加密的 JSON 文件，存放在 U 盘等安全离线环境中。</p>
+                <h3 style="text-align: left; margin-bottom: 10px;" data-i18n="backup.title">💽 数据备份与恢复 (离线 JSON)</h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 15px;" data-i18n="backup.desc">零知识架构下若遗忘密码数据将永久丢失。请务必定期导出未加密的 JSON 文件，存放在 U 盘等安全离线环境中。</p>
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                    <button class="secondary" onclick="exportJSON()" style="margin: 0;">⬇️ 导出明文备份</button>
-                    <label for="importFile" class="file-upload-label" style="margin: 0;">⬆️ 从备份恢复导入</label>
+                    <button class="secondary" data-i18n="backup.export" onclick="exportJSON()" style="margin: 0;">⬇️ 导出明文备份</button>
+                    <label for="importFile" class="file-upload-label" data-i18n="backup.import" style="margin: 0;">⬆️ 从备份恢复导入</label>
                     <input type="file" id="importFile" accept=".json" style="display: none;" onchange="importJSON(event)">
                 </div>
             </div>
@@ -292,22 +299,22 @@ app.get('/', (c) => {
                 <h3 style="text-align: left; margin-bottom: 15px;" id="saveFormTitle">➕ 保存新账号密码</h3>
                 <!-- 网站 -->
                 <div style="margin-bottom: 12px;">
-                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">网站</div>
-                    <input type="text" id="site" placeholder="如 github.com" style="margin: 0;">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;" data-i18n="form.label.site">网站</div>
+                    <input type="text" id="site" data-i18n-placeholder="form.placeholder.site" placeholder="如 github.com" style="margin: 0;">
                 </div>
                 <!-- 账号 -->
                 <div style="margin-bottom: 12px;">
-                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">账号</div>
-                    <input type="text" id="editUsername" placeholder="邮箱 / 手机号 / 用户名" style="margin: 0;">
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;" data-i18n="form.label.account">账号</div>
+                    <input type="text" id="editUsername" data-i18n-placeholder="form.placeholder.account" placeholder="邮箱 / 手机号 / 用户名" style="margin: 0;">
                 </div>
                 <!-- 密码 -->
                 <div style="margin-bottom: 12px;">
-                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">密码</div>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;" data-i18n="form.label.password">密码</div>
                     <div style="display: flex; gap: 6px; align-items: center;">
-                        <input type="text" id="password" placeholder="密码明文或点击生成" style="flex-grow: 1; margin: 0;">
-                        <button class="secondary" id="togglePwdBtn" onclick="togglePwdVisibility()" title="隐藏密码" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">🙈</button>
-                        <button class="secondary" onclick="generatePassword()" title="一键生成密码" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">🔑</button>
-                        <button class="secondary" id="genSettingsBtn" onclick="toggleGenSettings()" title="生成器设置" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">⚙</button>
+                        <input type="text" id="password" data-i18n-placeholder="form.placeholder.password" placeholder="密码明文或点击生成" style="flex-grow: 1; margin: 0;">
+                        <button class="secondary" id="togglePwdBtn" onclick="togglePwdVisibility()" data-i18n-title="form.hidePwd" title="隐藏密码" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">🙈</button>
+                        <button class="secondary" onclick="generatePassword()" data-i18n-title="form.genPwd" title="一键生成密码" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">🔑</button>
+                        <button class="secondary" id="genSettingsBtn" onclick="toggleGenSettings()" data-i18n-title="form.genSettings" title="生成器设置" style="padding: 10px 12px; margin: 0; width: auto; white-space: nowrap;">⚙</button>
                     </div>
                     <div id="strengthIndicator" style="display: none; margin-top: 4px;">
                         <div class="strength-bar" id="strengthBar" style="width: 0%; background: transparent;"></div>
@@ -316,7 +323,7 @@ app.get('/', (c) => {
                     <!-- 生成器设置（默认收起，放在密码下面） -->
                     <div id="genSettingsPanel" style="display: none; margin-top: 8px; padding: 10px 12px; background: var(--item-bg); border-radius: 8px; border: 1px solid var(--border);">
                         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 13px;">
-                            <span>长度 <input type="number" id="genLength" value="16" min="6" max="64" style="width: 48px; padding: 4px 6px; margin: 0; display: inline-block;"></span>
+                            <span data-i18n="form.label.length">长度 <input type="number" id="genLength" value="16" min="6" max="64" style="width: 48px; padding: 4px 6px; margin: 0; display: inline-block;"></span>
                             <label style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer; margin: 0;"><input type="checkbox" id="genUpper" checked style="width: auto; margin: 0;">A-Z</label>
                             <label style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer; margin: 0;"><input type="checkbox" id="genLower" checked style="width: auto; margin: 0;">a-z</label>
                             <label style="display: inline-flex; align-items: center; gap: 3px; cursor: pointer; margin: 0;"><input type="checkbox" id="genNumber" checked style="width: auto; margin: 0;">0-9</label>
@@ -326,8 +333,8 @@ app.get('/', (c) => {
                 </div>
                 <!-- 备注 -->
                 <div style="margin-bottom: 12px;">
-                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;">备注</div>
-                    <textarea id="note" rows="1" placeholder="选填，如安全问题答案、绑定的手机号等" oninput="autoResize(this)" style="margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;color:var(--text);background:var(--card-bg);resize:none;width:100%;box-sizing:border-box;font-family:inherit;line-height:1.5;overflow-y:auto;min-height:44px;max-height:120px;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 4px;" data-i18n="form.label.note">备注</div>
+                    <textarea id="note" rows="1" data-i18n-placeholder="form.placeholder.note" placeholder="选填，如安全问题答案、绑定的手机号等" oninput="autoResize(this)" style="margin:0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;color:var(--text);background:var(--card-bg);resize:none;width:100%;box-sizing:border-box;font-family:inherit;line-height:1.5;overflow-y:auto;min-height:44px;max-height:120px;" onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'"></textarea>
                 </div>
                 <!-- 按钮 -->
                 <div style="display: flex; gap: 10px;">
@@ -337,12 +344,12 @@ app.get('/', (c) => {
             </div>
 
             <div class="card">
-                <h3 style="text-align: left; margin-bottom: 15px;">📋 已保存的凭证</h3>
+                <h3 style="text-align: left; margin-bottom: 15px;" data-i18n="list.title">📋 已保存的凭证</h3>
                 <div class="sort-bar">
-                    <label>排序：</label>
+                    <label data-i18n="list.sort">排序：</label>
                     <div style="position: relative; width: auto;">
                         <div id="sortDisplay" onclick="toggleSortDropdown(event)" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;color:var(--text);background:var(--card-bg);cursor:pointer;display:flex;align-items:center;gap:4px;user-select:none;white-space:nowrap;height:100%;box-sizing:border-box;">
-                            <span id="sortLabel">最近添加</span> <span style="font-size:10px;">▾</span>
+                            <span id="sortLabel" data-i18n="list.sort.newest">最近添加</span> <span style="font-size:10px;">▾</span>
                         </div>
                         <select id="sortSelect" onchange="onSortChange()" style="display: none;">
                             <option value="newest">最近添加</option>
@@ -354,14 +361,14 @@ app.get('/', (c) => {
                     </div>
                     <div style="display: flex; flex-grow: 1; border: 1px solid var(--border); border-radius: 8px; overflow: visible; margin: 0; background: var(--card-bg); position: relative;">
                         <div id="siteFilterDisplay" onclick="toggleSiteDropdown(event)" style="padding: 8px 12px; white-space: nowrap; cursor: pointer; font-size: 14px; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 4px; user-select: none; background: var(--card-bg); color: var(--text); border-radius: 8px 0 0 8px;">
-                            <span id="siteFilterLabel">全部网站</span> <span style="font-size: 10px;">▾</span>
+                            <span id="siteFilterLabel" data-i18n="list.filter.all">全部网站</span> <span style="font-size: 10px;">▾</span>
                         </div>
                         <select id="siteFilter" onchange="filterSecrets()" style="display: none;">
                             <option value="">全部网站</option>
                         </select>
                         <!-- 自定义下拉面板 -->
                         <div id="siteDropdownPanel" style="display: none; position: absolute; top: 100%; left: 0; min-width: 180px; max-height: 250px; overflow-y: auto; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 1000; margin-top: 4px; padding: 4px 0;"></div>
-                        <input type="text" id="searchBar" class="search-bar" placeholder="🔍 搜索账号或备注..." oninput="filterSecrets()" style="margin: 0 !important; flex-grow: 1; border: none !important; padding: 8px 12px !important; border-radius: 0 !important;">
+                        <input type="text" id="searchBar" class="search-bar" data-i18n-placeholder="list.search" placeholder="🔍 搜索账号或备注..." oninput="filterSecrets()" style="margin: 0 !important; flex-grow: 1; border: none !important; padding: 8px 12px !important; border-radius: 0 !important;">
                     </div>
                 </div>
                 <div id="list"></div>
@@ -373,6 +380,294 @@ app.get('/', (c) => {
             let dbSalt = null; let allDecryptedSecrets = []; let isRegisterMode = false;
             let editTargetId = null; /* 正在编辑的记录 id */
             let editOriginalPassword = null; /* 编辑前的密码，用于判断是否更新时间戳 */
+
+            /* ====== 客户端国际化 i18n ====== */
+            const LANG = {
+              zh: {
+                'app.title': '私人密码箱',
+                'app.logo': '🔒 私人密码箱',
+                'lang.name': '中文',
+                'lang.toggle': 'EN',
+
+                'lock.warning': '⏰ {s} 秒后因闲置自动锁定',
+                'lock.auto': '已自动锁定，请重新登录',
+
+                'auth.loginTitle': '🔑 密码箱登录',
+                'auth.registerTitle': '📝 注册新账号',
+                'auth.loginBtn': '登 录',
+                'auth.registerBtn': '注 册 并 登 录',
+                'auth.label.username': '登录账号 (Username)',
+                'auth.placeholder.username': '输入你的账号名称',
+                'auth.label.password': '登录密码 (Master Password)',
+                'auth.placeholder.password': '输入登录密码',
+                'auth.label.confirm': '确认密码 (Confirm Password)',
+                'auth.placeholder.confirm': '请再次输入登录密码',
+                'auth.toggle.toLogin': '已有账号？立即登录',
+                'auth.toggle.toRegister': '没有账号？立即注册',
+                'auth.computing': '计算安全密钥中...',
+                'auth.error.empty': '账号和密码不能为空！',
+                'auth.error.confirmMismatch': '两次输入的密码不一致，请重新检查！',
+                'auth.error.registerFailed': '注册失败！',
+                'auth.success.register': '🎉 注册成功！',
+                'auth.error.loginFailed': '账号或密码错误！',
+                'auth.error.network': '网络错误: {msg}',
+
+                'header.logout': '安全退出',
+                'header.theme': '切换深色模式',
+
+                'backup.title': '💽 数据备份与恢复 (离线 JSON)',
+                'backup.desc': '零知识架构下若遗忘密码数据将永久丢失。请务必定期导出未加密的 JSON 文件，存放在 U 盘等安全离线环境中。',
+                'backup.export': '⬇️ 导出明文备份',
+                'backup.import': '⬆️ 从备份恢复导入',
+
+                'form.title.new': '➕ 保存新账号密码',
+                'form.title.edit': '✏️ 编辑密码',
+                'form.save': '加密并存入云端',
+                'form.update': '更新并保存',
+                'form.cancel': '取消编辑',
+                'form.label.site': '网站',
+                'form.placeholder.site': '如 github.com',
+                'form.label.account': '账号',
+                'form.placeholder.account': '邮箱 / 手机号 / 用户名',
+                'form.label.password': '密码',
+                'form.placeholder.password': '密码明文或点击生成',
+                'form.hidePwd': '隐藏密码',
+                'form.genPwd': '一键生成密码',
+                'form.genSettings': '生成器设置',
+                'form.label.length': '长度',
+                'form.label.note': '备注',
+                'form.placeholder.note': '选填，如安全问题答案、绑定的手机号等',
+                'form.error.empty': '网站名、账号和密码必填！',
+                'form.error.expired': '登录过期！',
+                'form.error.saveFailed': '保存失败: {msg}',
+                'form.error.genCharset': '请至少选择一种字符集！',
+
+                'list.title': '📋 已保存的凭证',
+                'list.empty': '此账号箱子中暂无密码记录。',
+                'list.sort': '排序：',
+                'list.sort.newest': '最近添加',
+                'list.sort.oldest': '最早添加',
+                'list.sort.updated': '最近更新',
+                'list.sort.most': '账号最多',
+                'list.filter.all': '全部网站',
+                'list.search': '🔍 搜索账号或备注...',
+                'list.accounts': '{n} 个账号',
+                'list.copy': '复制',
+                'list.open': '打开',
+                'list.copy.site': '网址已复制',
+                'list.label.account': '账号: ',
+                'list.label.password': '密码: ',
+                'list.btn.show': '显示',
+                'list.btn.hide': '隐藏',
+                'list.copied': '已复制',
+                'list.copied.account': '账号已复制',
+                'list.copied.password': '密码已复制',
+                'list.btn.edit': '✏️ 编辑',
+                'list.btn.delete': '删除',
+                'list.pin.on': '取消置顶',
+                'list.pin.off': '置顶',
+
+                'confirm.delete': '确定要永久删除这条记录吗？数据不可恢复！',
+
+                'export.empty': '当前密码箱为空，没有需要导出的数据！',
+
+                'import.confirm': '导入操作将会把 JSON 备份文件中的密码逐条加密上传至云端，确定执行吗？\\n(建议在全新的空账号中执行导入，避免数据重复)',
+                'import.error.format': 'JSON 格式错误，应为一个数组格式',
+                'import.success': '✅ 导入完成！成功将 {n} 条记录加密并存入当前账号。',
+                'import.error.failed': '导入失败: 文件解析错误或网络异常 ({msg})',
+
+                'strength.label': '密码强度：',
+                'strength.weak': '弱',
+                'strength.medium': '中',
+                'strength.strong': '强',
+
+                'time.justNow': '刚刚',
+                'time.minutesAgo': '{n} 分钟前',
+                'time.hoursAgo': '{n} 小时前',
+                'time.daysAgo': '{n} 天前',
+                'time.monthsAgo': '{n} 个月前',
+              },
+              en: {
+                'app.title': 'Secure Vault',
+                'app.logo': '🔒 Secure Vault',
+                'lang.name': 'English',
+                'lang.toggle': '中',
+
+                'lock.warning': '⏰ Auto-lock in {s} seconds',
+                'lock.auto': 'Auto-locked due to inactivity',
+
+                'auth.loginTitle': '🔑 Vault Login',
+                'auth.registerTitle': '📝 Create Account',
+                'auth.loginBtn': 'Log In',
+                'auth.registerBtn': 'Register & Log In',
+                'auth.label.username': 'Username',
+                'auth.placeholder.username': 'Enter your username',
+                'auth.label.password': 'Master Password',
+                'auth.placeholder.password': 'Enter your master password',
+                'auth.label.confirm': 'Confirm Password',
+                'auth.placeholder.confirm': 'Re-enter your master password',
+                'auth.toggle.toLogin': 'Already have an account? Log In',
+                'auth.toggle.toRegister': "Don't have an account? Register",
+                'auth.computing': 'Computing security keys...',
+                'auth.error.empty': 'Username and password are required!',
+                'auth.error.confirmMismatch': 'Passwords do not match!',
+                'auth.error.registerFailed': 'Registration failed!',
+                'auth.success.register': '🎉 Registration successful!',
+                'auth.error.loginFailed': 'Wrong username or password!',
+                'auth.error.network': 'Network error: {msg}',
+
+                'header.logout': 'Logout',
+                'header.theme': 'Toggle dark mode',
+
+                'backup.title': '💽 Backup & Restore (Offline JSON)',
+                'backup.desc': 'In a zero-knowledge architecture, lost passwords mean permanent data loss. Please regularly export your plaintext JSON backup to a secure offline location (e.g. USB drive).',
+                'backup.export': '⬇️ Export Plaintext Backup',
+                'backup.import': '⬆️ Restore from Backup',
+
+                'form.title.new': '➕ Save New Credential',
+                'form.title.edit': '✏️ Edit Credential',
+                'form.save': 'Encrypt & Save to Cloud',
+                'form.update': 'Update & Save',
+                'form.cancel': 'Cancel Edit',
+                'form.label.site': 'Website',
+                'form.placeholder.site': 'e.g. github.com',
+                'form.label.account': 'Account',
+                'form.placeholder.account': 'Email / Phone / Username',
+                'form.label.password': 'Password',
+                'form.placeholder.password': 'Plaintext password or generate',
+                'form.hidePwd': 'Hide password',
+                'form.genPwd': 'Generate password',
+                'form.genSettings': 'Generator settings',
+                'form.label.length': 'Length',
+                'form.label.note': 'Note',
+                'form.placeholder.note': 'Optional — security answers, linked phone, etc.',
+                'form.error.empty': 'Website, account and password are required!',
+                'form.error.expired': 'Session expired!',
+                'form.error.saveFailed': 'Save failed: {msg}',
+                'form.error.genCharset': 'Please select at least one character set!',
+
+                'list.title': '📋 Saved Credentials',
+                'list.empty': 'No credentials in this vault.',
+                'list.sort': 'Sort: ',
+                'list.sort.newest': 'Newest first',
+                'list.sort.oldest': 'Oldest first',
+                'list.sort.updated': 'Recently updated',
+                'list.sort.most': 'Most accounts',
+                'list.filter.all': 'All sites',
+                'list.search': '🔍 Search account or note...',
+                'list.accounts': '{n} account(s)',
+                'list.copy': 'Copy',
+                'list.open': 'Open',
+                'list.copy.site': 'URL copied',
+                'list.label.account': 'Account: ',
+                'list.label.password': 'Password: ',
+                'list.btn.show': 'Show',
+                'list.btn.hide': 'Hide',
+                'list.copied': 'Copied',
+                'list.copied.account': 'Account copied',
+                'list.copied.password': 'Password copied',
+                'list.btn.edit': '✏️ Edit',
+                'list.btn.delete': 'Delete',
+                'list.pin.on': 'Unpin',
+                'list.pin.off': 'Pin',
+
+                'confirm.delete': 'Permanently delete this record? This cannot be undone!',
+
+                'export.empty': 'Your vault is empty — nothing to export.',
+
+                'import.confirm': 'This will encrypt and upload each entry from the JSON backup. Proceed?\\n(Recommended for fresh vaults to avoid duplicates)',
+                'import.error.format': 'Invalid JSON format — expected an array.',
+                'import.success': '✅ Import complete! {n} entries encrypted and saved.',
+                'import.error.failed': 'Import failed: {msg}',
+
+                'strength.label': 'Password strength: ',
+                'strength.weak': 'Weak',
+                'strength.medium': 'Medium',
+                'strength.strong': 'Strong',
+
+                'time.justNow': 'just now',
+                'time.minutesAgo': '{n} min ago',
+                'time.hoursAgo': '{n} hr ago',
+                'time.daysAgo': '{n} day(s) ago',
+                'time.monthsAgo': '{n} month(s) ago',
+              },
+            };
+
+            let currentLang = 'zh';
+
+            function t(key, vars) {
+              var text = (LANG[currentLang] && LANG[currentLang][key]) || (LANG.zh[key] || key);
+              if (vars) {
+                for (var k in vars) {
+                  text = text.replace('{' + k + '}', vars[k]);
+                }
+              }
+              return text;
+            }
+
+            function switchLanguage(lang) {
+              currentLang = lang;
+              localStorage.setItem('vault-lang', lang);
+              document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+              applyLanguage();
+            }
+
+            function applyLanguage() {
+              /* data-i18n: textContent */
+              var els = document.querySelectorAll('[data-i18n]');
+              for (var i = 0; i < els.length; i++) {
+                var key = els[i].getAttribute('data-i18n');
+                if (key) els[i].textContent = t(key);
+              }
+              /* data-i18n-placeholder: placeholder */
+              var inputs = document.querySelectorAll('[data-i18n-placeholder]');
+              for (var j = 0; j < inputs.length; j++) {
+                var pk = inputs[j].getAttribute('data-i18n-placeholder');
+                if (pk) inputs[j].placeholder = t(pk);
+              }
+              /* data-i18n-title: title */
+              var titles = document.querySelectorAll('[data-i18n-title]');
+              for (var k = 0; k < titles.length; k++) {
+                var tk = titles[k].getAttribute('data-i18n-title');
+                if (tk) titles[k].title = t(tk);
+              }
+              /* language toggle buttons */
+              var langBtn = document.getElementById('langToggle');
+              if (langBtn) langBtn.textContent = t('lang.toggle');
+              var langBtnAuth = document.getElementById('langToggleAuth');
+              if (langBtnAuth) langBtnAuth.textContent = t('lang.toggle');
+              /* 重新构建排序下拉 */
+              initSortDropdown();
+              /* 动态管理的按钮文本 */
+              if (editTargetId) {
+                document.getElementById('saveFormTitle').textContent = t('form.title.edit');
+                document.getElementById('saveBtn').textContent = t('form.update');
+              } else {
+                document.getElementById('saveFormTitle').textContent = t('form.title.new');
+                document.getElementById('saveBtn').textContent = t('form.save');
+              }
+              document.getElementById('cancelEditBtn').textContent = t('form.cancel');
+              document.getElementById('authTitle').innerText = isRegisterMode ? t('auth.registerTitle') : t('auth.loginTitle');
+              document.getElementById('authBtn').innerText = isRegisterMode ? t('auth.registerBtn') : t('auth.loginBtn');
+              document.getElementById('authToggle').innerText = isRegisterMode ? t('auth.toggle.toLogin') : t('auth.toggle.toRegister');
+            }
+
+            /* 初始化语言：localStorage > 浏览器偏好 > 中文 */
+            (function initLang() {
+              try {
+                var saved = localStorage.getItem('vault-lang');
+                if (saved) {
+                  currentLang = saved;
+                } else {
+                  var navLang = (navigator.language || '').split('-')[0];
+                  currentLang = navLang === 'en' ? 'en' : 'zh';
+                }
+                document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
+              } catch (e) {
+                currentLang = 'zh';
+              }
+              try { applyLanguage(); } catch(e) { /* 语言切换失败不阻塞页面 */ }
+            })();
 
             /* ====== 自动锁定 ====== */
             let lastActivity = Date.now();
@@ -399,7 +694,7 @@ app.get('/', (c) => {
                     }
                     if (elapsed >= WARNING_MS) {
                         const remaining = Math.ceil((LOCK_MS - elapsed) / 1000);
-                        warningEl.textContent = '⏰ ' + remaining + ' 秒后因闲置自动锁定';
+                        warningEl.textContent = t('lock.warning', {s: remaining});
                         warningEl.style.display = 'block';
                     } else {
                         warningEl.style.display = 'none';
@@ -417,7 +712,7 @@ app.get('/', (c) => {
                 document.getElementById('authCard').style.display = 'block';
                 document.getElementById('list').innerHTML = '';
                 if (lockCheckTimer) clearTimeout(lockCheckTimer);
-                alert('已自动锁定，请重新登录');
+                alert(t('lock.auto'));
             }
 
             /* ====== 深色模式 ====== */
@@ -427,7 +722,10 @@ app.get('/', (c) => {
 
             function applyTheme(theme) {
                 document.documentElement.setAttribute('data-theme', theme);
-                document.getElementById('themeToggle').textContent = theme === 'dark' ? '☀️' : '🌙';
+                var icon = theme === 'dark' ? '☀️' : '🌙';
+                document.getElementById('themeToggle').textContent = icon;
+                var ta = document.getElementById('themeToggleAuth');
+                if (ta) ta.textContent = icon;
                 localStorage.setItem('vault-theme', theme);
             }
 
@@ -492,9 +790,9 @@ app.get('/', (c) => {
                 const types = [hasUpper, hasLower, hasDigit, hasSymbol].filter(Boolean).length;
                 const len = pwd.length;
 
-                if (len >= 12 && types >= 3) return { level: 3, label: '强', width: 75, cls: 'strength-strong' };
-                if (len >= 8 && types >= 2) return { level: 2, label: '中', width: 50, cls: 'strength-medium' };
-                return { level: 1, label: '弱', width: 25, cls: 'strength-weak' };
+                if (len >= 12 && types >= 3) return { level: 3, label: 'strong', width: 75, cls: 'strength-strong' };
+                if (len >= 8 && types >= 2) return { level: 2, label: 'medium', width: 50, cls: 'strength-medium' };
+                return { level: 1, label: 'weak', width: 25, cls: 'strength-weak' };
             }
 
             function updateStrengthIndicator() {
@@ -509,12 +807,12 @@ app.get('/', (c) => {
                 indicator.style.display = 'block';
                 bar.style.width = result.width + '%';
                 var colorMap = {
-                    '弱': 'var(--strength-weak)',
-                    '中': 'var(--strength-medium)',
-                    '强': 'var(--strength-strong)'
+                    'weak': 'var(--strength-weak)',
+                    'medium': 'var(--strength-medium)',
+                    'strong': 'var(--strength-strong)'
                 };
                 bar.style.background = colorMap[result.label] || 'transparent';
-                label.textContent = '密码强度：' + result.label;
+                label.textContent = t('strength.label') + t('strength.' + result.label);
                 label.className = 'strength-label ' + result.cls;
             }
 
@@ -524,19 +822,19 @@ app.get('/', (c) => {
                 var now = new Date();
                 var date = new Date(dateStr + 'Z'); /* D1 返回的是 UTC，补 Z */
                 var diff = Math.floor((now - date) / 1000);
-                if (diff < 60) return '刚刚';
-                if (diff < 3600) return Math.floor(diff / 60) + ' 分钟前';
-                if (diff < 86400) return Math.floor(diff / 3600) + ' 小时前';
-                if (diff < 2592000) return Math.floor(diff / 86400) + ' 天前';
-                return Math.floor(diff / 2592000) + ' 个月前';
+                if (diff < 60) return t('time.justNow');
+                if (diff < 3600) return t('time.minutesAgo', {n: Math.floor(diff / 60)});
+                if (diff < 86400) return t('time.hoursAgo', {n: Math.floor(diff / 3600)});
+                if (diff < 2592000) return t('time.daysAgo', {n: Math.floor(diff / 86400)});
+                return t('time.monthsAgo', {n: Math.floor(diff / 2592000)});
             }
 
             /* ====== 登录 / 注册 ====== */
             function toggleAuthMode() {
                 isRegisterMode = !isRegisterMode;
-                document.getElementById('authTitle').innerText = isRegisterMode ? "📝 注册新账号" : "🔑 密码箱登录";
-                document.getElementById('authBtn').innerText = isRegisterMode ? "注 册 并 登 录" : "登 录";
-                document.getElementById('authToggle').innerText = isRegisterMode ? "已有账号？立即登录" : "没有账号？立即注册";
+                document.getElementById('authTitle').innerText = isRegisterMode ? t('auth.registerTitle') : t('auth.loginTitle');
+                document.getElementById('authBtn').innerText = isRegisterMode ? t('auth.registerBtn') : t('auth.loginBtn');
+                document.getElementById('authToggle').innerText = isRegisterMode ? t('auth.toggle.toLogin') : t('auth.toggle.toRegister');
                 document.getElementById('confirmPasswordGroup').style.display = isRegisterMode ? "block" : "none";
             }
 
@@ -544,18 +842,18 @@ app.get('/', (c) => {
                 const username = document.getElementById('usernameInput').value.trim();
                 const password = document.getElementById('passwordInput').value;
 
-                if (!username || !password) return alert("账号和密码不能为空！");
+                if (!username || !password) return alert(t('auth.error.empty'));
 
                 if (isRegisterMode) {
                     const confirmPassword = document.getElementById('confirmPasswordInput').value;
                     if (password !== confirmPassword) {
-                        return alert("两次输入的密码不一致，请重新检查！");
+                        return alert(t('auth.error.confirmMismatch'));
                     }
                 }
 
                 try {
                     if (!dbSalt) await fetchMasterSalt();
-                    document.getElementById('authBtn').innerText = "计算安全密钥中...";
+                    document.getElementById('authBtn').innerText = t('auth.computing');
 
                     setTimeout(async () => {
                         try {
@@ -565,20 +863,20 @@ app.get('/', (c) => {
                             if (isRegisterMode) {
                                 const res = await fetch('/api/register', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
+                                    headers: { 'Content-Type': 'application/json', 'x-lang': currentLang },
                                     body: JSON.stringify({ username, auth_key: authKey })
                                 });
                                 const data = await res.json();
-                                if (!res.ok) throw new Error(data.error || "注册失败！");
-                                alert("🎉 注册成功！");
+                                if (!res.ok) throw new Error(data.error || t('auth.error.registerFailed'));
+                                alert(t('auth.success.register'));
                             } else {
                                 const res = await fetch('/api/login', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
+                                    headers: { 'Content-Type': 'application/json', 'x-lang': currentLang },
                                     body: JSON.stringify({ username, auth_key: authKey })
                                 });
                                 const data = await res.json();
-                                if (!res.ok) throw new Error(data.error || "账号或密码错误！");
+                                if (!res.ok) throw new Error(data.error || t('auth.error.loginFailed'));
                             }
 
                             cachedUsername = username; cachedAuthKey = authKey; cachedMasterKey = masterKey;
@@ -591,15 +889,16 @@ app.get('/', (c) => {
 
                             resetActivity();
                             startLockTimer();
+                            applyLanguage(); /* 刷新当前语言 */
                             await loadSecrets();
                         } catch (err) {
                             alert(err.message);
                         } finally {
-                            document.getElementById('authBtn').innerText = isRegisterMode ? "注 册 并 登 录" : "登 录";
+                            document.getElementById('authBtn').innerText = isRegisterMode ? t('auth.registerBtn') : t('auth.loginBtn');
                         }
                     }, 50);
                 } catch (e) {
-                    alert("网络错误: " + e.message);
+                    alert(t('auth.error.network', {msg: e.message}));
                 }
             }
 
@@ -614,9 +913,9 @@ app.get('/', (c) => {
                 if (lockCheckTimer) clearTimeout(lockCheckTimer);
 
                 isRegisterMode = false;
-                document.getElementById('authTitle').innerText = "🔑 密码箱登录";
-                document.getElementById('authBtn').innerText = "登 录";
-                document.getElementById('authToggle').innerText = "没有账号？立即注册";
+                document.getElementById('authTitle').innerText = t('auth.loginTitle');
+                document.getElementById('authBtn').innerText = t('auth.loginBtn');
+                document.getElementById('authToggle').innerText = t('auth.toggle.toRegister');
                 document.getElementById('confirmPasswordGroup').style.display = "none";
 
                 document.getElementById('authCard').style.display = "block";
@@ -630,8 +929,8 @@ app.get('/', (c) => {
             function cancelEdit() {
                 editTargetId = null;
                 editOriginalPassword = null;
-                document.getElementById('saveFormTitle').textContent = '➕ 保存新账号密码';
-                document.getElementById('saveBtn').textContent = '加密并存入云端';
+                document.getElementById('saveFormTitle').textContent = t('form.title.new');
+                document.getElementById('saveBtn').textContent = t('form.save');
                 document.getElementById('saveBtn').style.background = '';
                 document.getElementById('cancelEditBtn').style.display = 'none';
                 document.getElementById('site').value = '';
@@ -645,13 +944,13 @@ document.getElementById('note').style.height = '44px';
             }
 
             async function saveSecret() {
-                if (!cachedMasterKey || !cachedAuthKey) return alert("登录过期！");
+                if (!cachedMasterKey || !cachedAuthKey) return alert(t('form.error.expired'));
                 const site = document.getElementById('site').value.trim();
                 const username = document.getElementById('editUsername').value.trim();
                 const password = document.getElementById('password').value;
                 const note = document.getElementById('note').value.trim();
 
-                if (!site || !username || !password) return alert("网站名、账号和密码必填！");
+                if (!site || !username || !password) return alert(t('form.error.empty'));
 
                 try {
                     const iv = window.crypto.getRandomValues(new Uint8Array(12));
@@ -666,7 +965,7 @@ document.getElementById('note').style.height = '44px';
                         /* 更新已有记录：密码没变则不更新时间戳 */
                         const res = await fetch('/api/secrets/' + editTargetId, {
                             method: 'PUT',
-                            headers: { 'Content-Type': 'application/json', 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey },
+                            headers: { 'Content-Type': 'application/json', 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey, 'x-lang': currentLang },
                             body: JSON.stringify({ encrypted_data, iv: iv_str, touch_timestamp: password === editOriginalPassword ? false : undefined })
                         });
                         if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
@@ -675,7 +974,7 @@ document.getElementById('note').style.height = '44px';
                         /* 新增 */
                         const res = await fetch('/api/secrets', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey },
+                            headers: { 'Content-Type': 'application/json', 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey, 'x-lang': currentLang },
                             body: JSON.stringify({ encrypted_data, iv: iv_str })
                         });
                         if (!res.ok) { const err = await res.json(); throw new Error(err.error); }
@@ -688,13 +987,13 @@ document.getElementById('note').style.height = '44px';
                     }
                     await loadSecrets();
                 } catch (e) {
-                    alert("保存失败: " + e.message);
+                    alert(t('form.error.saveFailed', {msg: e.message}));
                 }
             }
 
             async function loadSecrets() {
                 if (!cachedMasterKey || !cachedAuthKey) return;
-                const res = await fetch('/api/secrets', { headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
+                const res = await fetch('/api/secrets', { headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey, 'x-lang': currentLang }});
                 if (!res.ok) return logout();
 
                 const rawData = await res.json();
@@ -753,8 +1052,8 @@ document.getElementById('note').style.height = '44px';
                     sites[allDecryptedSecrets[i].site] = true;
                 }
                 var siteList = Object.keys(sites).sort(function(a, b) { return a.localeCompare(b); });
-                sel.innerHTML = '<option value="">全部网站</option>';
-                panel.innerHTML = '<div class="sf-opt"' + (cur === '' ? ' style="font-weight:600;background:var(--secondary-bg);"' : '') + ' onclick="selectSite(&#39;&#39;)">全部网站</div>';
+                sel.innerHTML = '<option value="">' + t('list.filter.all') + '</option>';
+                panel.innerHTML = '<div class="sf-opt"' + (cur === '' ? ' style="font-weight:600;background:var(--secondary-bg);"' : '') + ' onclick="selectSite(&#39;&#39;)">' + t('list.filter.all') + '</div>';
                 for (var i = 0; i < siteList.length; i++) {
                     sel.innerHTML += '<option value="' + siteList[i] + '"' + (siteList[i] === cur ? ' selected' : '') + '>' + siteList[i] + '</option>';
                     panel.innerHTML += '<div class="sf-opt"' + (siteList[i] === cur ? ' style="font-weight:600;background:var(--secondary-bg);"' : '') + ' onclick="selectSite(&#39;' + siteList[i] + '&#39;)">' + escapeHtml(siteList[i]) + '</div>';
@@ -769,7 +1068,7 @@ document.getElementById('note').style.height = '44px';
 
             function selectSite(val) {
                 document.getElementById('siteFilter').value = val;
-                document.getElementById('siteFilterLabel').textContent = val || '全部网站';
+                document.getElementById('siteFilterLabel').textContent = val || t('list.filter.all');
                 document.getElementById('siteDropdownPanel').style.display = 'none';
                 document.getElementById('siteFilter').dispatchEvent(new Event('change'));
             }
@@ -781,25 +1080,28 @@ document.getElementById('note').style.height = '44px';
                 panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
             }
 
-            function selectSort(val, label) {
+            function selectSort(val, _label) {
                 document.getElementById('sortSelect').value = val;
-                document.getElementById('sortLabel').textContent = label;
+                var sortLabels = { newest: 'list.sort.newest', oldest: 'list.sort.oldest', updated: 'list.sort.updated', most: 'list.sort.most' };
+                document.getElementById('sortLabel').textContent = t(sortLabels[val] || val);
                 document.getElementById('sortDropdownPanel').style.display = 'none';
                 filterSecrets();
             }
 
             /* 填充排序下拉选项 */
-            (function initSortDropdown() {
+            function initSortDropdown() {
                 var sel = document.getElementById('sortSelect');
                 var panel = document.getElementById('sortDropdownPanel');
-                var labels = { newest: '最近添加', oldest: '最早添加', updated: '最近更新', most: '账号最多' };
+                var labels = { newest: 'list.sort.newest', oldest: 'list.sort.oldest', updated: 'list.sort.updated', most: 'list.sort.most' };
                 panel.innerHTML = '';
                 for (var i = 0; i < sel.options.length; i++) {
                     var val = sel.options[i].value;
-                    var label = labels[val] || sel.options[i].textContent;
+                    var label = t(labels[val] || val);
+                    sel.options[i].textContent = t(labels[val] || val);
                     panel.innerHTML += '<div class="sf-opt" onclick="selectSort(&#39;' + val + '&#39;,&#39;' + label + '&#39;)">' + label + '</div>';
                 }
-            })();
+            }
+            initSortDropdown();
 
             /* 点击其他地方关闭下拉 */
             document.addEventListener('click', function(e) {
@@ -829,7 +1131,7 @@ document.getElementById('note').style.height = '44px';
             function renderSecrets(secrets) {
                 var listDiv = document.getElementById('list');
                 if (secrets.length === 0) {
-                    listDiv.innerHTML = '<p style="color:var(--text-secondary); text-align:center;">此账号箱子中暂无密码记录。</p>';
+                    listDiv.innerHTML = '<p style="color:var(--text-secondary); text-align:center;">' + t('list.empty') + '</p>';
                     return;
                 }
 
@@ -844,7 +1146,7 @@ document.getElementById('note').style.height = '44px';
                     groups[gitem.site].push(gitem);
                 }
 
-                /* 组按 site A-Z 排序 */
+                /* 组排序 */
                 var sortBy = document.getElementById('sortSelect').value;
                 var siteNames = Object.keys(groups).sort(function(a, b) {
                     var ga = groups[a], gb = groups[b];
@@ -869,8 +1171,8 @@ document.getElementById('note').style.height = '44px';
 
                     /* 组头 */
                     html += '<div class="group-header" data-group="' + groupId + '" id="' + groupId + '-head">' +
-                        '<span>' + escapeHtml(site) + ' <button class="secondary" onclick="event.stopPropagation();navigator.clipboard.writeText(&#39;' + escapeHtml(site) + '&#39;);showToast(&#39;网址已复制&#39;)" style="padding:2px 8px;font-size:11px;margin:0 0 0 8px;width:auto;display:inline;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);">复制</button>' +
-                        ' <button class="secondary" onclick="event.stopPropagation();window.open(\\'https://' + escapeHtml(site) + '\\',\\'_blank\\')" style="padding:2px 8px;font-size:11px;margin:0 0 0 4px;width:auto;display:inline;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);">打开</button> <span class="count">(' + items.length + ' 个账号)</span></span>' +
+                        '<span>' + escapeHtml(site) + ' <button class="secondary" onclick="event.stopPropagation();navigator.clipboard.writeText(&#39;' + escapeHtml(site) + '&#39;);showToast(&#39;' + t('list.copy.site') + '&#39;)" style="padding:2px 8px;font-size:11px;margin:0 0 0 8px;width:auto;display:inline;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);">' + t('list.copy') + '</button>' +
+                        ' <button class="secondary" onclick="event.stopPropagation();window.open(\\'https://' + escapeHtml(site) + '\\',\\'_blank\\')" style="padding:2px 8px;font-size:11px;margin:0 0 0 4px;width:auto;display:inline;background:rgba(0,0,0,0.06);border:1px solid rgba(0,0,0,0.12);">' + t('list.open') + '</button> <span class="count">' + t('list.accounts', {n: items.length}) + '</span></span>' +
                         '<span id="' + groupId + '-arrow">' + (expanded ? '▾' : '▸') + '</span>' +
                     '</div>';
 
@@ -883,22 +1185,22 @@ document.getElementById('note').style.height = '44px';
                         var timeHtml = '<div class="time-ago">🕐 ' + timeAgo(item.updated_at) + '</div>';
 
                         html += '<div class="secret-item" style="position:relative;">' +
-                            '<button class="pin-btn-top" onclick="togglePin(' + item.id + ')" title="' + (item.pinned ? '取消置顶' : '置顶') + '">' + (item.pinned ? '📌' : '📍') + '</button>' +
+                            '<button class="pin-btn-top" onclick="togglePin(' + item.id + ')" title="' + (item.pinned ? t('list.pin.on') : t('list.pin.off')) + '">' + (item.pinned ? '📌' : '📍') + '</button>' +
                             '<div style="flex-grow: 1;">' +
                                 '<div style="margin: 6px 0 0; font-size: 14px; color:var(--text-secondary);">' +
-                                    '账号: <span id="user-' + item.id + '">' + escapeHtml(item.username) + '</span>' +
-                                    '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;user-' + item.id + '&#39;, &#39;账号已复制&#39;)">复制</button>' +
+                                    t('list.label.account') + '<span id="user-' + item.id + '">' + escapeHtml(item.username) + '</span>' +
+                                    '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;user-' + item.id + '&#39;, &#39;' + t('list.copied.account') + '&#39;)">' + t('list.copy') + '</button>' +
                                 '</div>' +
                                 '<div style="margin: 4px 0 0; font-size: 14px; color:var(--text-secondary);">' +
-                                    '密码: <span id="pwd-' + item.id + '" data-pwd="' + escapeHtml(item.password) + '">•••••••</span>' +
-                                    '<button class="secondary copy-btn" onclick="togglePasswordVisibility(&#39;pwd-' + item.id + '&#39;, this)">显示</button>' +
-                                    '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;pwd-' + item.id + '&#39;, &#39;密码已复制&#39;)">复制</button>' +
+                                    t('list.label.password') + '<span id="pwd-' + item.id + '" data-pwd="' + escapeHtml(item.password) + '">•••••••</span>' +
+                                    '<button class="secondary copy-btn" onclick="togglePasswordVisibility(&#39;pwd-' + item.id + '&#39;, this)">' + t('list.btn.show') + '</button>' +
+                                    '<button class="secondary copy-btn" onclick="copyToClipboard(&#39;pwd-' + item.id + '&#39;, &#39;' + t('list.copied.password') + '&#39;)">' + t('list.copy') + '</button>' +
                                 '</div>' +
                                 noteHtml + timeHtml +
                             '</div>' +
                             '<div class="item-actions">' +
-                                '<button class="secondary small-btn" onclick="editSecret(' + item.id + ')" style="width: auto;">✏️ 编辑</button>' +
-                                '<button class="danger small-btn" onclick="deleteSecret(' + item.id + ')" style="width: auto;">删除</button>' +
+                                '<button class="secondary small-btn" onclick="editSecret(' + item.id + ')" style="width: auto;">' + t('list.btn.edit') + '</button>' +
+                                '<button class="danger small-btn" onclick="deleteSecret(' + item.id + ')" style="width: auto;">' + t('list.btn.delete') + '</button>' +
                             '</div>' +
                         '</div>';
                     }
@@ -932,8 +1234,8 @@ document.getElementById('note').style.height = '44px';
 
                 editTargetId = id;
                 editOriginalPassword = item.password;
-                document.getElementById('saveFormTitle').textContent = '✏️ 编辑密码';
-                document.getElementById('saveBtn').textContent = '更新并保存';
+                document.getElementById('saveFormTitle').textContent = t('form.title.edit');
+                document.getElementById('saveBtn').textContent = t('form.update');
                 document.getElementById('saveBtn').style.background = '#30d158';
                 document.getElementById('cancelEditBtn').style.display = 'inline-block';
                 document.getElementById('site').value = item.site;
@@ -948,8 +1250,8 @@ document.getElementById('note').style.height = '44px';
 
             async function deleteSecret(id) {
                 if (!cachedAuthKey) return;
-                if (confirm("确定要永久删除这条记录吗？数据不可恢复！")) {
-                    const res = await fetch('/api/secrets/' + id, { method: 'DELETE', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
+                if (confirm(t('confirm.delete'))) {
+                    const res = await fetch('/api/secrets/' + id, { method: 'DELETE', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey, 'x-lang': currentLang }});
                     if (res.ok) {
                         if (editTargetId === id) cancelEdit();
                         await loadSecrets();
@@ -987,7 +1289,7 @@ document.getElementById('note').style.height = '44px';
                         }
                     }
                 }
-                fetch('/api/secrets/' + id + '/pin', { method: 'POST', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey }});
+                fetch('/api/secrets/' + id + '/pin', { method: 'POST', headers: { 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey, 'x-lang': currentLang }});
             }
 
             /* ====== 密码生成器 ====== */
@@ -1013,7 +1315,7 @@ document.getElementById('note').style.height = '44px';
                 if (document.getElementById('genLower').checked) chars += 'abcdefghijklmnopqrstuvwxyz';
                 if (document.getElementById('genNumber').checked) chars += '0123456789';
                 if (document.getElementById('genSymbols').checked) chars += '!@#$%^&*()_+-=[]{}|;:,.<>?';
-                if (!chars) return alert("请至少选择一种字符集！");
+                if (!chars) return alert(t('form.error.genCharset'));
 
                 /* 分离特殊符号和非特殊符号 */
                 var symbolRegex = /[^A-Za-z0-9]/g;
@@ -1049,10 +1351,10 @@ document.getElementById('note').style.height = '44px';
                 var el = document.getElementById(id);
                 if (el.textContent === '•••••••') {
                     el.textContent = el.getAttribute('data-pwd');
-                    btn.innerText = '隐藏';
+                    btn.innerText = t('list.btn.hide');
                 } else {
                     el.textContent = '•••••••';
-                    btn.innerText = '显示';
+                    btn.innerText = t('list.btn.show');
                 }
             }
 
@@ -1060,7 +1362,7 @@ document.getElementById('note').style.height = '44px';
                 var el = document.getElementById(elementId);
                 var text = el.getAttribute('data-pwd') || el.textContent;
                 navigator.clipboard.writeText(text);
-                showToast(msg || '已复制');
+                showToast(msg || t('list.copied'));
             }
 
             function showToast(msg) {
@@ -1088,7 +1390,7 @@ document.getElementById('note').style.height = '44px';
 
             /* ====== 导出 / 导入 ====== */
             function exportJSON() {
-                if (allDecryptedSecrets.length === 0) return alert("当前密码箱为空，没有需要导出的数据！");
+                if (allDecryptedSecrets.length === 0) return alert(t('export.empty'));
                 const exportData = allDecryptedSecrets.map(function(item) {
                     return { site: item.site, username: item.username, password: item.password, note: item.note };
                 });
@@ -1107,7 +1409,7 @@ document.getElementById('note').style.height = '44px';
             async function importJSON(event) {
                 const file = event.target.files[0];
                 if (!file) return;
-                if (!confirm("导入操作将会把 JSON 备份文件中的密码逐条加密上传至云端，确定执行吗？\\n(建议在全新的空账号中执行导入，避免数据重复)")) {
+                if (!confirm(t('import.confirm'))) {
                     event.target.value = ''; return;
                 }
 
@@ -1115,7 +1417,7 @@ document.getElementById('note').style.height = '44px';
                 reader.onload = async function(e) {
                     try {
                         const importedData = JSON.parse(e.target.result);
-                        if (!Array.isArray(importedData)) throw new Error("JSON 格式错误，应为一个数组格式");
+                        if (!Array.isArray(importedData)) throw new Error(t('import.error.format'));
 
                         let successCount = 0;
                         document.getElementById('importFile').disabled = true;
@@ -1136,15 +1438,15 @@ document.getElementById('note').style.height = '44px';
 
                             const res = await fetch('/api/secrets', {
                                 method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey },
+                                headers: { 'Content-Type': 'application/json', 'x-username': cachedUsername, 'x-auth-key': cachedAuthKey, 'x-lang': currentLang },
                                 body: JSON.stringify({ encrypted_data, iv: iv_str })
                             });
                             if (res.ok) successCount++;
                         }
-                        alert("✅ 导入完成！成功将 " + successCount + " 条记录加密并存入当前账号。");
+                        alert(t('import.success', {n: successCount}));
                         await loadSecrets();
                     } catch (err) {
-                        alert("导入失败: 文件解析错误或网络异常 (" + err.message + ")");
+                        alert(t('import.error.failed', {msg: err.message}));
                     } finally {
                         event.target.value = ''; document.getElementById('importFile').disabled = false;
                     }
