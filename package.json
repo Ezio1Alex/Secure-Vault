@@ -1,14 +1,20 @@
 {
-  "name": "mimaben2",
+  "name": "secure-vault",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "A zero-knowledge, end-to-end encrypted password vault running on Cloudflare Workers with D1 database.",
+  "main": "src/index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "migrate": "wrangler d1 migrations apply vault_db"
   },
-  "keywords": [],
+  "keywords": ["password-manager", "cloudflare-workers", "hono", "zero-knowledge", "e2ee"],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
   "dependencies": {
     "hono": "^4.12.30"
   },

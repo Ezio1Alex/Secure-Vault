@@ -2,7 +2,7 @@ name: Deploy Worker
 on:
   push:
     branches:
-      - main  # 只有推送到 main 分支时才会自动部署
+      - main
 
 jobs:
   deploy:
@@ -14,7 +14,7 @@ jobs:
         with:
           node-version: 22
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Deploy
         uses: cloudflare/wrangler-action@v3
         with:
