@@ -315,7 +315,6 @@ secure-vault/
 ├── schema.sql            # 数据库完整结构（参考用）
 ├── wrangler.toml         # Cloudflare Workers 配置文件
 ├── package.json
-├── CLAUDE.md             # AI 辅助开发配置
 ├── README.md             # 说明文档（英文）
 ├── README.zh-CN.md       # 说明文档（中文）
 └── LICENSE
