@@ -313,9 +313,8 @@ secure-vault/
 ├── schema.sql            # Full database schema for reference
 ├── wrangler.toml         # Cloudflare Workers configuration
 ├── package.json
-├── CLAUDE.md             # Claude AI assistant instructions (Chinese)
-├── README.md             # Documentation (Chinese)
-├── README_EN.md          # Documentation (English)
+├── README.md             # Documentation (English)
+├── README.zh-CN.md       # Documentation (Chinese)
 └── LICENSE
 ```
 
